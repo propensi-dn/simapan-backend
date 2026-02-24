@@ -24,6 +24,7 @@ class Member(models.Model):
     postal_code     = models.CharField(max_length=10)
     nik             = models.CharField(max_length=16, unique=True)
     ktp_image       = models.ImageField(upload_to='ktp/')
+    selfie_image    = models.ImageField(upload_to='selfie/', null=True, blank=True)
     status          = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
     rejection_reason= models.TextField(null=True, blank=True)
     verified_by     = models.ForeignKey(User, null=True, blank=True,

@@ -18,6 +18,7 @@ class MemberRegisterSerializer(serializers.Serializer):
     # Documents
     nik            = serializers.CharField(max_length=16)
     ktp_image      = serializers.ImageField()
+    selfie_image = serializers.ImageField()
     # Account Info
     email          = serializers.EmailField()
     password       = serializers.CharField(write_only=True, validators=[validate_password])

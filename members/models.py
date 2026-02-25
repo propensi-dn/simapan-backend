@@ -34,3 +34,14 @@ class Member(models.Model):
 
     def __str__(self):
         return f'{self.full_name} ({self.status})'
+
+class BankAccount(models.Model):
+    member         = models.ForeignKey(Member, on_delete=models.CASCADE, related_name='bank_accounts')
+    bank_name      = models.CharField(max_length=100)
+    account_number = models.CharField(max_length=50)
+    account_holder = models.CharField(max_length=150)
+    is_primary     = models.BooleanField(default=False)
+    created_at     = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.bank_name} - {self.account_number} ({self.member.full_name})"

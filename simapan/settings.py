@@ -51,6 +51,8 @@ INSTALLED_APPS = [
     # Local apps
     'users',
     'members',
+    'savings',
+    'config',
 ]
 
 MIDDLEWARE = [

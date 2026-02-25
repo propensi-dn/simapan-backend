@@ -10,7 +10,10 @@ class LoginView(APIView):
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
         if not serializer.is_valid():
-            return Response(serializer.errors, status=status.HTTP_401_UNAUTHORIZED)
+            return Response(
+                {'message': serializer.errors['non_field_errors'][0]},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
         user = serializer.validated_data['user']
         refresh = RefreshToken.for_user(user)
         return Response({

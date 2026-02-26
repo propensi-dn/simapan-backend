@@ -2,6 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from users.models import User
 from .models import Member
+from .utils import add_watermark
 
 class MemberRegisterSerializer(serializers.Serializer):
     # Basic Info
@@ -33,10 +34,23 @@ class MemberRegisterSerializer(serializers.Serializer):
         if User.objects.filter(email=value).exists():
             raise serializers.ValidationError('Email sudah terdaftar')
         return value
-
+    
     def validate(self, data):
         if data['password'] != data['confirm_password']:
             raise serializers.ValidationError({'confirm_password': 'Password tidak cocok'})
+        
+        if 'ktp_image' in data and data['ktp_image']:
+            data['ktp_image'] = add_watermark(
+                data['ktp_image'],
+                text="SI-MAPAN"
+            )
+
+        if 'selfie_image' in data and data['selfie_image']:
+            data['selfie_image'] = add_watermark(
+                data['selfie_image'],
+                text="SI-MAPAN"
+            )
+
         return data
 
     def create(self, validated_data):

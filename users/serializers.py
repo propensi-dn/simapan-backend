@@ -1,19 +1,23 @@
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 from rest_framework import serializers
-from rest_framework_simplejwt.tokens import RefreshToken
+
+from members.models import MemberProfile, MemberStatus
 
 
 class LoginSerializer(serializers.Serializer):
-    email = serializers.EmailField()
+    email = serializers.CharField()
     password = serializers.CharField(write_only=True)
 
     def validate(self, attrs):
-        email = attrs['email']
+        identifier = attrs['email'].strip()
         password = attrs['password']
         user_model = get_user_model()
 
         try:
-            user = user_model.objects.get(email=email)
+            user = user_model.objects.get(
+                Q(email__iexact=identifier) | Q(username__iexact=identifier)
+            )
         except user_model.DoesNotExist as exc:
             raise serializers.ValidationError('Email atau password salah') from exc
 
@@ -23,19 +27,12 @@ class LoginSerializer(serializers.Serializer):
         if not user.is_active:
             raise serializers.ValidationError('Akun tidak aktif')
 
-        refresh = RefreshToken.for_user(user)
+        if user.role == 'MEMBER':
+            profile = MemberProfile.objects.filter(user=user).first()
+            if profile and profile.status == MemberStatus.PENDING:
+                raise serializers.ValidationError('Akun belum diverifikasi')
+            if profile and profile.status == MemberStatus.REJECTED:
+                raise serializers.ValidationError('Akun ditolak')
+
         attrs['user'] = user
-        attrs['tokens'] = {
-            'access': str(refresh.access_token),
-            'refresh': str(refresh),
-        }
         return attrs
-
-
-class LogoutSerializer(serializers.Serializer):
-    refresh = serializers.CharField()
-
-    def validate_refresh(self, value):
-        if not value:
-            raise serializers.ValidationError('Refresh token wajib diisi')
-        return value

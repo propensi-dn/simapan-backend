@@ -30,3 +30,13 @@ class LoginSerializer(serializers.Serializer):
 
         data['user'] = user
         return data
+
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(required=True)
+    new_password = serializers.CharField(required=True)
+    confirm_password = serializers.CharField(required=True)
+
+    def validate(self, data):
+        if data['new_password'] != data['confirm_password']:
+            raise serializers.ValidationError("Konfirmasi password tidak cocok.")
+        return data

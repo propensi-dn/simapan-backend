@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'users',
     'members',
     'savings',
+    'notifications',
     'config',
 ]
 

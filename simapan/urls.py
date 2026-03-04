@@ -24,6 +24,7 @@ urlpatterns = [
     path('api/auth/', include('users.urls')),
     path('api/savings/', include('savings.urls')),
     path('api/config/', include('config.urls')),
+    path('api/verifications/', include('verifications.urls')),
 ]
 
 if settings.DEBUG:

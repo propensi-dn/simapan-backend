@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     'members',
     'savings',
     'config',
+    'verifications',
 ]
 
 MIDDLEWARE = [

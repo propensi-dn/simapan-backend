@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
 from users.models import User
-from .models import Member
+from .models import Member, BankAccount
 from .utils import add_watermark
 
 class MemberRegisterSerializer(serializers.Serializer):
@@ -60,3 +60,31 @@ class MemberRegisterSerializer(serializers.Serializer):
         user     = User.objects.create_user(email=email, password=password)
         member   = Member.objects.create(user=user, **validated_data)
         return member
+
+class BankAccountSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BankAccount
+        fields = ['id', 'bank_name', 'account_number', 'account_holder', 'is_primary']
+
+class MemberProfileSerializer(serializers.ModelSerializer):
+    email = serializers.EmailField(source='user.email', read_only=True)
+    bank_accounts = BankAccountSerializer(many=True, read_only=True)
+    profile_picture = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Member
+        fields = [
+            'member_id', 'full_name', 'gender', 'place_of_birth', 
+            'date_of_birth', 'nik', 'email', 'phone_number', 
+            'home_address', 'profile_picture', 'bank_accounts'
+        ]
+        # Field yang dilarang diubah sesuai kriteria
+        read_only_fields = ['member_id', 'nik', 'email']
+
+    def get_profile_picture(self, obj):
+        if obj.selfie_image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.selfie_image.url)
+            return obj.selfie_image.url
+        return None

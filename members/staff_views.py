@@ -35,13 +35,6 @@ class StandardPagination(PageNumberPagination):
 
 
 class PendingMembersListView(APIView):
-    """
-    GET /api/staff/members/pending/
-
-    Mengembalikan daftar semua calon anggota berstatus PENDING.
-    Mendukung search berdasarkan nama, email, atau NIK melalui query param ?search=
-    serta pagination dengan ?page= dan ?page_size=.
-    """
     permission_classes = [IsStaffOrAbove]
 
     def get(self, request):
@@ -67,17 +60,6 @@ class PendingMembersListView(APIView):
 
 
 class MemberVerifyView(APIView):
-    """
-    GET  /api/staff/members/{id}/verify/  — detail lengkap calon anggota.
-    POST /api/staff/members/{id}/verify/  — approve atau reject calon anggota.
-
-    Body POST:
-        { "action": "approve" }
-        { "action": "reject", "rejection_reason": "<alasan>" }
-
-    Hanya anggota berstatus PENDING yang dapat diverifikasi.
-    Setelah verifikasi, email notifikasi dikirim ke calon anggota.
-    """
     permission_classes = [IsStaffOrAbove]
 
     def _get_member(self, pk):

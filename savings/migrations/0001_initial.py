@@ -16,21 +16,23 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name='Saving',
+            name='SavingTransaction',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('saving_id', models.CharField(editable=False, max_length=30, unique=True)),
-                ('transaction_id', models.CharField(editable=False, max_length=30, unique=True)),
-                ('saving_type', models.CharField(choices=[('PRINCIPAL', 'Simpanan Pokok'), ('MANDATORY', 'Simpanan Wajib'), ('VOLUNTARY', 'Simpanan Sukarela')], max_length=20)),
-                ('amount', models.DecimalField(decimal_places=2, max_digits=15)),
+                ('saving_type', models.CharField(choices=[('POKOK', 'Simpanan Pokok'), ('WAJIB', 'Simpanan Wajib'), ('SUKARELA', 'Simpanan Sukarela')], max_length=20)),
+                ('saving_id', models.CharField(max_length=50, unique=True)),
+                ('transaction_id', models.CharField(max_length=50, unique=True)),
+                ('amount', models.DecimalField(decimal_places=2, max_digits=14)),
                 ('status', models.CharField(choices=[('PENDING', 'Pending'), ('SUCCESS', 'Success'), ('REJECTED', 'Rejected')], default='PENDING', max_length=20)),
-                ('proof_image', models.ImageField(upload_to='savings/proofs/')),
+                ('transfer_proof', models.FileField(upload_to='transfer_proofs/')),
+                ('member_bank_name', models.CharField(max_length=100)),
+                ('member_account_number', models.CharField(max_length=50)),
                 ('rejection_reason', models.TextField(blank=True)),
-                ('verified_at', models.DateTimeField(blank=True, null=True)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('bank_account', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, to='members.bankaccount')),
-                ('member', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='savings', to='members.member')),
-                ('verified_by', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='verified_savings', to=settings.AUTH_USER_MODEL)),
+                ('submitted_at', models.DateTimeField(auto_now_add=True)),
+                ('updated_at', models.DateTimeField(auto_now=True)),
             ],
+            options={
+                'ordering': ['-submitted_at'],
+            },
         ),
     ]

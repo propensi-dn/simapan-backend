@@ -1,62 +1,55 @@
 from django.db import models
-from members.models import Member, BankAccount
 
 
-def generate_saving_id(saving_type):
-    prefix_map = {
-        'PRINCIPAL': 'SIM-PK',
-        'MANDATORY': 'SIM-WB',
-        'VOLUNTARY': 'SIM-SK',
-    }
-    prefix = prefix_map.get(saving_type, 'SIM')
-    last = Saving.objects.filter(saving_type=saving_type).count() + 1
-    return f"{prefix}-{last:04d}"
+class SavingType(models.TextChoices):
+	POKOK = 'POKOK', 'Simpanan Pokok'
+	WAJIB = 'WAJIB', 'Simpanan Wajib'
+	SUKARELA = 'SUKARELA', 'Simpanan Sukarela'
 
 
-def generate_saving_transaction_id():
-    last = Saving.objects.count() + 1
-    return f"TRX-SV-{last:04d}"
+class SavingStatus(models.TextChoices):
+	PENDING = 'PENDING', 'Pending'
+	SUCCESS = 'SUCCESS', 'Success'
+	REJECTED = 'REJECTED', 'Rejected'
 
 
-class Saving(models.Model):
-    SAVING_TYPE = [
-        ('PRINCIPAL', 'Simpanan Pokok'),
-        ('MANDATORY', 'Simpanan Wajib'),
-        ('VOLUNTARY', 'Simpanan Sukarela'),
-    ]
-    STATUS = [
-        ('PENDING', 'Pending'),
-        ('SUCCESS', 'Success'),
-        ('REJECTED', 'Rejected'),
-    ]
+class SavingTransaction(models.Model):
+	user = models.ForeignKey('users.User', on_delete=models.CASCADE, related_name='saving_transactions')
+	saving_type = models.CharField(max_length=20, choices=SavingType.choices)
+	saving_id = models.CharField(max_length=50, unique=True)
+	transaction_id = models.CharField(max_length=50, unique=True)
+	amount = models.DecimalField(max_digits=14, decimal_places=2)
+	status = models.CharField(max_length=20, choices=SavingStatus.choices, default=SavingStatus.PENDING)
+	transfer_proof = models.FileField(upload_to='transfer_proofs/')
+	member_bank_name = models.CharField(max_length=100)
+	member_account_number = models.CharField(max_length=50)
+	rejection_reason = models.TextField(blank=True)
+	submitted_at = models.DateTimeField(auto_now_add=True)
+	updated_at = models.DateTimeField(auto_now=True)
 
-    saving_id        = models.CharField(max_length=30, unique=True, editable=False)
-    transaction_id   = models.CharField(max_length=30, unique=True, editable=False)
-    member           = models.ForeignKey(Member, on_delete=models.CASCADE, related_name='savings')
-    saving_type      = models.CharField(max_length=20, choices=SAVING_TYPE)
-    amount           = models.DecimalField(max_digits=15, decimal_places=2)
-    status           = models.CharField(max_length=20, choices=STATUS, default='PENDING')
-    proof_image      = models.ImageField(upload_to='savings/proofs/')
-    bank_account     = models.ForeignKey(
-        BankAccount, on_delete=models.SET_NULL,
-        null=True, blank=True
-    )
-    rejection_reason = models.TextField(blank=True)
-    verified_by      = models.ForeignKey(
-        'users.User', on_delete=models.SET_NULL,
-        null=True, blank=True,
-        related_name='verified_savings'
-    )
-    verified_at      = models.DateTimeField(null=True, blank=True)
-    created_at       = models.DateTimeField(auto_now_add=True)
+	class Meta:
+		ordering = ['-submitted_at']
 
-    def save(self, *args, **kwargs):
-        # Auto-generate ID saat pertama kali dibuat
-        if not self.saving_id:
-            self.saving_id = generate_saving_id(self.saving_type)
-        if not self.transaction_id:
-            self.transaction_id = generate_saving_transaction_id()
-        super().save(*args, **kwargs)
+	def __str__(self) -> str:
+		return f'{self.transaction_id} - {self.user.email}'
 
-    def __str__(self):
-        return f"{self.saving_id} - {self.member.full_name} ({self.status})"
+	def _next_sequence(self) -> int:
+		return SavingTransaction.objects.count() + 1
+
+	def save(self, *args, **kwargs):
+		if not self.saving_id:
+			seq = self._next_sequence()
+			prefix_map = {
+				SavingType.POKOK: 'SIM-PK',
+				SavingType.WAJIB: 'SIM-WB',
+				SavingType.SUKARELA: 'SIM-SK',
+			}
+			self.saving_id = f"{prefix_map[self.saving_type]}-{seq:05d}"
+
+		if not self.transaction_id:
+			seq = self._next_sequence()
+			self.transaction_id = f'TRX-SV-{seq:05d}'
+
+		super().save(*args, **kwargs)
+
+# Create your models here.

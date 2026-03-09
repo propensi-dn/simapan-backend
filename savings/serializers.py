@@ -6,6 +6,8 @@ from savings.models import SavingTransaction, SavingType
 
 
 class SavingTransactionSerializer(serializers.ModelSerializer):
+    transfer_proof_url = serializers.SerializerMethodField()
+
     class Meta:
         model = SavingTransaction
         fields = (
@@ -16,6 +18,7 @@ class SavingTransactionSerializer(serializers.ModelSerializer):
             'amount',
             'status',
             'transfer_proof',
+            'transfer_proof_url',
             'member_bank_name',
             'member_account_number',
             'rejection_reason',
@@ -23,15 +26,34 @@ class SavingTransactionSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ('saving_id', 'transaction_id', 'status', 'rejection_reason', 'submitted_at')
 
+    def get_transfer_proof_url(self, obj):
+        if not obj.transfer_proof:
+            return None
+        request = self.context.get('request')
+        if request:
+            return request.build_absolute_uri(obj.transfer_proof.url)
+        return obj.transfer_proof.url
+
 
 class InitialDepositCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = SavingTransaction
         fields = ('transfer_proof', 'member_bank_name', 'member_account_number')
 
+    def validate_transfer_proof(self, file):
+        max_size = 5 * 1024 * 1024
+        if file.size > max_size:
+            raise serializers.ValidationError('Ukuran file maksimal 5MB')
+
+        allowed_types = {'image/jpeg', 'image/png', 'application/pdf'}
+        if hasattr(file, 'content_type') and file.content_type not in allowed_types:
+            raise serializers.ValidationError('Format file harus JPG, PNG, atau PDF')
+
+        return file
+
     def create(self, validated_data):
         return SavingTransaction.objects.create(
-            user=self.context['request'].user,
+            member=self.context['request'].user.member,
             saving_type=SavingType.POKOK,
             amount=Decimal('150000.00'),
             **validated_data,
@@ -46,6 +68,17 @@ class DepositCreateSerializer(serializers.ModelSerializer):
         model = SavingTransaction
         fields = ('saving_type', 'amount', 'transfer_proof', 'member_bank_name', 'member_account_number')
 
+    def validate_transfer_proof(self, file):
+        max_size = 5 * 1024 * 1024
+        if file.size > max_size:
+            raise serializers.ValidationError('Ukuran file maksimal 5MB')
+
+        allowed_types = {'image/jpeg', 'image/png', 'application/pdf'}
+        if hasattr(file, 'content_type') and file.content_type not in allowed_types:
+            raise serializers.ValidationError('Format file harus JPG, PNG, atau PDF')
+
+        return file
+
     def validate(self, attrs):
         saving_type = attrs['saving_type']
         amount = attrs['amount']
@@ -58,4 +91,4 @@ class DepositCreateSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        return SavingTransaction.objects.create(user=self.context['request'].user, **validated_data)
+        return SavingTransaction.objects.create(member=self.context['request'].user.member, **validated_data)

@@ -14,7 +14,7 @@ class SavingStatus(models.TextChoices):
 
 
 class SavingTransaction(models.Model):
-	user = models.ForeignKey('users.User', on_delete=models.CASCADE, related_name='saving_transactions')
+	member = models.ForeignKey('members.Member', on_delete=models.CASCADE, related_name='saving_transactions')
 	saving_type = models.CharField(max_length=20, choices=SavingType.choices)
 	saving_id = models.CharField(max_length=50, unique=True)
 	transaction_id = models.CharField(max_length=50, unique=True)
@@ -31,7 +31,7 @@ class SavingTransaction(models.Model):
 		ordering = ['-submitted_at']
 
 	def __str__(self) -> str:
-		return f'{self.transaction_id} - {self.user.email}'
+		return f'{self.transaction_id} - {self.member.user.email}'
 
 	def _next_sequence(self) -> int:
 		return SavingTransaction.objects.count() + 1

@@ -1,0 +1,155 @@
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status, permissions
+from rest_framework.parsers import MultiPartParser, FormParser
+from .serializers import MemberRegisterSerializer, MemberProfileSerializer, BankAccountSerializer
+from .models import Member, BankAccount
+
+class MemberRegisterView(APIView):
+    permission_classes = [permissions.AllowAny]
+    parser_classes = [MultiPartParser, FormParser]  # untuk file upload
+
+    def post(self, request):
+        serializer = MemberRegisterSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                {'message': 'Registrasi berhasil. Data sedang menunggu verifikasi.'},
+                status=status.HTTP_201_CREATED
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class MemberStatusView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        email = request.query_params.get('email')
+        if not email:
+            return Response({'error': 'Email wajib diisi'}, status=400)
+        try:
+            member = Member.objects.get(user__email=email)
+            return Response({'email': email, 'status': member.status})
+        except Member.DoesNotExist:
+            return Response({'error': 'Email tidak ditemukan'}, status=404)
+
+class MemberProfileView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def get(self, request):
+        try:
+            member = request.user.member
+            serializer = MemberProfileSerializer(member, context={'request': request})
+            return Response(serializer.data)
+        except Member.DoesNotExist:
+            return Response({'error': 'Profil tidak ditemukan'}, status=404)
+
+    def patch(self, request):
+        """Update informasi profil (telepon, alamat, atau foto)"""
+        try:
+            member = request.user.member
+        except Member.DoesNotExist:
+            return Response({'error': 'Profil tidak ditemukan'}, status=status.HTTP_404_NOT_FOUND)
+
+        mutable_data = request.data.copy()
+        mutable_data.pop('profile_picture', None)
+        mutable_data.pop('selfie_image', None)
+
+        serializer = MemberProfileSerializer(member, data=mutable_data, partial=True, context={'request': request})
+        
+        if serializer.is_valid():
+            uploaded_picture = request.FILES.get('profile_picture') or request.FILES.get('selfie_image')
+            if uploaded_picture:
+                member.selfie_image = uploaded_picture
+                member.save(update_fields=['selfie_image'])
+            
+            serializer.save()
+            member.refresh_from_db()
+            response_serializer = MemberProfileSerializer(member, context={'request': request})
+            return Response(response_serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class MemberBankAccountView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        try:
+            member = request.user.member
+        except Member.DoesNotExist:
+            return Response({'error': 'Profil tidak ditemukan'}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = BankAccountSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        is_primary = serializer.validated_data.get('is_primary', False)
+        if is_primary:
+            BankAccount.objects.filter(member=member, is_primary=True).update(is_primary=False)
+        elif not BankAccount.objects.filter(member=member).exists():
+            is_primary = True
+
+        bank_account = serializer.save(member=member, is_primary=is_primary)
+        return Response(BankAccountSerializer(bank_account).data, status=status.HTTP_201_CREATED)
+
+
+class MemberBankAccountDetailView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _get_member(self, request):
+        try:
+            return request.user.member
+        except Member.DoesNotExist:
+            return None
+
+    def _get_member_account(self, member, pk):
+        try:
+            return BankAccount.objects.get(pk=pk, member=member)
+        except BankAccount.DoesNotExist:
+            return None
+
+    def patch(self, request, pk):
+        member = self._get_member(request)
+        if not member:
+            return Response({'error': 'Profil tidak ditemukan'}, status=status.HTTP_404_NOT_FOUND)
+
+        bank_account = self._get_member_account(member, pk)
+        if not bank_account:
+            return Response({'error': 'Rekening bank tidak ditemukan'}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = BankAccountSerializer(bank_account, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        is_primary = serializer.validated_data.get('is_primary')
+        if is_primary is False and bank_account.is_primary:
+            return Response(
+                {'error': 'Harus ada minimal satu rekening utama.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if is_primary is True:
+            BankAccount.objects.filter(member=member, is_primary=True).exclude(pk=bank_account.pk).update(is_primary=False)
+
+        updated_account = serializer.save()
+        return Response(BankAccountSerializer(updated_account).data, status=status.HTTP_200_OK)
+
+    def delete(self, request, pk):
+        member = self._get_member(request)
+        if not member:
+            return Response({'error': 'Profil tidak ditemukan'}, status=status.HTTP_404_NOT_FOUND)
+
+        bank_account = self._get_member_account(member, pk)
+        if not bank_account:
+            return Response({'error': 'Rekening bank tidak ditemukan'}, status=status.HTTP_404_NOT_FOUND)
+
+        was_primary = bank_account.is_primary
+        bank_account.delete()
+
+        if was_primary:
+            fallback_account = BankAccount.objects.filter(member=member).order_by('id').first()
+            if fallback_account:
+                fallback_account.is_primary = True
+                fallback_account.save(update_fields=['is_primary'])
+
+        return Response(status=status.HTTP_204_NO_CONTENT)

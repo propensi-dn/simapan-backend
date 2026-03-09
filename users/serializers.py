@@ -1,38 +1,42 @@
-from django.contrib.auth import get_user_model
-from django.db.models import Q
 from rest_framework import serializers
-
-from members.models import MemberProfile, MemberStatus
-
+from django.contrib.auth import authenticate
+from members.models import Member
 
 class LoginSerializer(serializers.Serializer):
-    email = serializers.CharField()
+    email    = serializers.EmailField()
     password = serializers.CharField(write_only=True)
 
-    def validate(self, attrs):
-        identifier = attrs['email'].strip()
-        password = attrs['password']
-        user_model = get_user_model()
-
-        try:
-            user = user_model.objects.get(
-                Q(email__iexact=identifier) | Q(username__iexact=identifier)
-            )
-        except user_model.DoesNotExist as exc:
-            raise serializers.ValidationError('Email atau password salah') from exc
-
-        if not user.check_password(password):
+    def validate(self, data):
+        user = authenticate(email=data['email'], password=data['password'])
+        if not user:
             raise serializers.ValidationError('Email atau password salah')
+        
+        try:
+            member = user.member
+            if member.status == 'PENDING':
+                raise serializers.ValidationError(
+                    'Akun kamu belum diverifikasi. Silakan cek status pendaftaran kamu.'
+                )
+            if member.status == 'REJECTED':
+                raise serializers.ValidationError(
+                    'Akun kamu ditolak. Silakan hubungi petugas untuk informasi lebih lanjut.'
+                )
+            if member.status == 'INACTIVE':
+                raise serializers.ValidationError(
+                    'Akun kamu sudah tidak aktif.'
+                )
+        except Member.DoesNotExist:
+            pass
 
-        if not user.is_active:
-            raise serializers.ValidationError('Akun tidak aktif')
+        data['user'] = user
+        return data
 
-        if user.role == 'MEMBER':
-            profile = MemberProfile.objects.filter(user=user).first()
-            if profile and profile.status == MemberStatus.PENDING:
-                raise serializers.ValidationError('Akun belum diverifikasi')
-            if profile and profile.status == MemberStatus.REJECTED:
-                raise serializers.ValidationError('Akun ditolak')
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(required=True)
+    new_password = serializers.CharField(required=True)
+    confirm_password = serializers.CharField(required=True)
 
-        attrs['user'] = user
-        return attrs
+    def validate(self, data):
+        if data['new_password'] != data['confirm_password']:
+            raise serializers.ValidationError("Konfirmasi password tidak cocok.")
+        return data

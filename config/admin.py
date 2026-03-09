@@ -1,11 +1,16 @@
 from django.contrib import admin
+from .models import CooperativeBank, LandingPageConfig, AboutConfig, FAQ, Service
 
-from config.models import CooperativeBankAccount
+admin.site.register(CooperativeBank)
+admin.site.register(FAQ)
+admin.site.register(Service)
 
+@admin.register(LandingPageConfig)
+class LandingPageConfigAdmin(admin.ModelAdmin):
+    def has_add_permission(self, request):
+        return False if LandingPageConfig.objects.exists() else True
 
-@admin.register(CooperativeBankAccount)
-class CooperativeBankAccountAdmin(admin.ModelAdmin):
-	list_display = ('bank_name', 'account_number', 'account_holder', 'is_active')
-	list_filter = ('is_active',)
-
-# Register your models here.
+@admin.register(AboutConfig)
+class AboutConfigAdmin(admin.ModelAdmin):
+    def has_add_permission(self, request):
+        return False if AboutConfig.objects.exists() else True

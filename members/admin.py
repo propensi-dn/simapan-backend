@@ -1,12 +1,5 @@
 from django.contrib import admin
+from .models import Member, BankAccount
 
-from members.models import MemberProfile
-
-
-@admin.register(MemberProfile)
-class MemberProfileAdmin(admin.ModelAdmin):
-	list_display = ('user', 'status', 'member_id', 'created_at')
-	list_filter = ('status',)
-	search_fields = ('user__email', 'member_id')
-
-# Register your models here.
+admin.site.register(Member)
+admin.site.register(BankAccount)

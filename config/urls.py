@@ -1,7 +1,9 @@
 from django.urls import path
-
-from config.views import ActiveCooperativeBankAccountView
+from .views import HeroContentView, AboutContentView, FAQListView, ServiceListView
 
 urlpatterns = [
-    path('bank-account/', ActiveCooperativeBankAccountView.as_view(), name='active-bank-account'),
+    path('hero/', HeroContentView.as_view(), name='hero-content'),
+    path('services/', ServiceListView.as_view(), name='service-list'),
+    path('about/', AboutContentView.as_view(), name='about-content'),
+    path('faq/', FAQListView.as_view(), name='faq-list'),
 ]

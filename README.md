@@ -95,5 +95,3 @@ Saya bertanggung jawab penuh atas modul mutasi simpanan rutin (masuk), pengelola
 ### 6. PBI-19: Update Status Pengajuan Penarikan Dana (Priority: Should Have)
 - **Deskripsi:** Mengembangkan logika petugas untuk memproses transfer penarikan dan memotong saldo anggota yang berstatus `PENDING` menjadi `COMPLETED`.
 - **Tujuan:** Memastikan pencatatan kas keluar akurat dan saldo anggota terpotong dengan benar.
-
->>>>>>> README.md

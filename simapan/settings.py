@@ -10,7 +10,7 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG', default=False, cast=bool)
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost').split(',')
+ALLOWED_HOSTS = config('ALLOWED_HOSTS').split(',')
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -137,7 +137,7 @@ SIMPLE_JWT = {
     'BLACKLIST_AFTER_ROTATION': True,
 }
 
-CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', default='http://localhost:3000').split(',')
+CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS').split(',')
 CORS_ALLOW_CREDENTIALS = True
 
 AUTH_USER_MODEL = 'users.User'

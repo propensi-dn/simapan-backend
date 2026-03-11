@@ -134,7 +134,7 @@ class SavingsOverviewView(BaseMemberSavingsView):
 
 		transactions = SavingTransaction.objects.filter(member=member)
 		if member.status == 'VERIFIED':
-			transactions = transactions.none()
+			transactions = transactions.filter(saving_type=SavingType.POKOK)
 
 		status_filter = request.query_params.get('status')
 		if status_filter:

@@ -156,6 +156,10 @@ CLOUDINARY_STORAGE = {
     'API_SECRET': config('CLOUDINARY_API_SECRET'),
 }
 
+CSRF_TRUSTED_ORIGINS = [
+    'https://empirical-harrietta-simapan-6d52f2ea.koyeb.app',
+]
+
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
 

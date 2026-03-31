@@ -86,6 +86,7 @@ INSTALLED_APPS = [
     'savings',
     'notifications',
     'config',
+    'loans',
 ]
 
 MIDDLEWARE = [

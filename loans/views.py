@@ -13,7 +13,7 @@ from .serializers import (
     LoanCreateSerializer,
     LoanSimulationSerializer,
 )
-from .services import calculate_credit_score, simulate_installment
+from .services import calculate_credit_score, has_bad_debt, simulate_installment
 from members.models import BankAccount
 from members.serializers import BankAccountSerializer
 
@@ -111,6 +111,8 @@ class LoanCreateView(APIView):
             'interest_rate': 0.5,
             'min_amount': 1_000_000,
             'max_amount': 50_000_000,
+            'member_status': member.status,
+            'has_bad_debt': has_bad_debt(member),
         })
 
     def post(self, request):

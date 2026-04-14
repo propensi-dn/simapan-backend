@@ -49,8 +49,9 @@ class NotificationListView(APIView):
 
 class NotificationDetailView(APIView):
     """
-    GET   /api/notifications/{id}/   → detail notifikasi
-    PATCH /api/notifications/{id}/   → mark as read
+    GET    /api/notifications/{id}/   → detail notifikasi + auto mark as read
+    PATCH  /api/notifications/{id}/   → mark as read explicitly
+    DELETE /api/notifications/{id}/   → hapus notifikasi individual
     """
     permission_classes = [IsAuthenticated]
 
@@ -82,6 +83,15 @@ class NotificationDetailView(APIView):
         notif.is_read = True
         notif.save(update_fields=['is_read'])
         return Response({'message': 'Notifikasi ditandai sudah dibaca.'})
+
+    def delete(self, request, pk):
+        """Hapus notifikasi individual milik user yang sedang login."""
+        notif = self._get_object(pk, request.user)
+        if not notif:
+            return Response({'message': 'Notifikasi tidak ditemukan.'}, status=status.HTTP_404_NOT_FOUND)
+
+        notif.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class UnreadCountView(APIView):

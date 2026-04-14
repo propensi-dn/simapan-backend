@@ -76,7 +76,8 @@ class MemberProfileSerializer(serializers.ModelSerializer):
         fields = [
             'member_id', 'full_name', 'gender', 'place_of_birth', 
             'date_of_birth', 'nik', 'email', 'phone_number', 
-            'home_address', 'profile_picture', 'bank_accounts'
+            'home_address', 'profile_picture', 'bank_accounts',
+            'status'
         ]
         # Field yang dilarang diubah sesuai kriteria
         read_only_fields = ['member_id', 'nik', 'email']

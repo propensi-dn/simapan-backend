@@ -14,11 +14,11 @@ class CooperativeBank(models.Model):
         return f"{self.bank_name} - {self.account_number}"
 
 class LandingPageConfig(models.Model):
-    title = models.CharField(max_length=255, default="Empowering Your Financial Future with")
+    title = models.CharField(max_length=255, default="Mewujudkan Masa Depan Keuangan Anda Bersama")
     brand_name = models.CharField(max_length=100, default="SI-MAPAN")
-    description = models.TextField(default="A secure and transparent platform for managing community savings and loans.")
+    description = models.TextField(default="Platform aman dan transparan untuk mengelola simpan pinjam masyarakat.")
     hero_image = models.ImageField(upload_to='config/hero/', null=True, blank=True)
-    cta_text = models.CharField(max_length=50, default="Register as Member")
+    cta_text = models.CharField(max_length=50, default="Daftar sebagai Anggota")
 
     class Meta:
         verbose_name = "Landing Page Configuration"

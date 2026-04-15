@@ -135,3 +135,140 @@ class LoanSimulationSerializer(serializers.Serializer):
         if value not in [6, 12, 24, 36]:
             raise serializers.ValidationError('Tenor harus 6, 12, 24, atau 36 bulan')
         return value
+
+
+class ManagerPendingLoanSerializer(serializers.ModelSerializer):
+    member_name = serializers.CharField(source='member.full_name', read_only=True)
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+
+    class Meta:
+        model = Loan
+        fields = [
+            'id',
+            'loan_id',
+            'member_name',
+            'category',
+            'category_display',
+            'amount',
+            'tenor',
+            'application_date',
+            'status',
+        ]
+
+
+class ManagerLoanHistorySerializer(serializers.ModelSerializer):
+    member_name = serializers.CharField(source='member.full_name', read_only=True)
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    reviewed_by_email = serializers.EmailField(source='reviewed_by.email', read_only=True)
+
+    class Meta:
+        model = Loan
+        fields = [
+            'id',
+            'loan_id',
+            'member_name',
+            'category',
+            'category_display',
+            'amount',
+            'tenor',
+            'application_date',
+            'status',
+            'reviewed_at',
+            'reviewed_by_email',
+            'rejection_reason',
+        ]
+
+
+class ManagerAllLoanSerializer(serializers.ModelSerializer):
+    member_name = serializers.CharField(source='member.full_name', read_only=True)
+    remaining_balance = serializers.DecimalField(source='outstanding_balance', max_digits=14, decimal_places=2, read_only=True)
+    due_date = serializers.DateField(source='next_due_date', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = Loan
+        fields = [
+            'id',
+            'member_name',
+            'loan_id',
+            'remaining_balance',
+            'due_date',
+            'status',
+            'status_display',
+        ]
+
+
+class ManagerMemberLoanHistoryItemSerializer(serializers.ModelSerializer):
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+
+    class Meta:
+        model = Loan
+        fields = [
+            'id',
+            'loan_id',
+            'amount',
+            'status',
+            'status_display',
+            'application_date',
+        ]
+
+
+class ManagerLoanDetailSerializer(serializers.ModelSerializer):
+    member_name = serializers.CharField(source='member.full_name', read_only=True)
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    credit_score = serializers.SerializerMethodField()
+    total_savings = serializers.SerializerMethodField()
+    active_loans_count = serializers.SerializerMethodField()
+    bad_debt_history_count = serializers.SerializerMethodField()
+    collateral_image_url = serializers.SerializerMethodField()
+    salary_slip_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Loan
+        fields = [
+            'id',
+            'loan_id',
+            'member_name',
+            'application_date',
+            'status',
+            'status_display',
+            'amount',
+            'tenor',
+            'category',
+            'category_display',
+            'description',
+            'credit_score',
+            'total_savings',
+            'active_loans_count',
+            'bad_debt_history_count',
+            'collateral_image_url',
+            'salary_slip_url',
+        ]
+
+    def _build_file_url(self, file_field):
+        if not file_field:
+            return None
+        request = self.context.get('request')
+        url = file_field.url
+        return request.build_absolute_uri(url) if request else url
+
+    def get_credit_score(self, obj):
+        from .services import calculate_credit_score
+        return calculate_credit_score(obj.member)
+
+    def get_total_savings(self, obj):
+        balance = getattr(obj.member, 'savings_balance', None)
+        return balance.total_overall if balance else 0
+
+    def get_active_loans_count(self, obj):
+        return obj.member.loans.filter(status__in=[LoanStatus.ACTIVE, LoanStatus.OVERDUE]).count()
+
+    def get_bad_debt_history_count(self, obj):
+        return BadDebt.objects.filter(loan__member=obj.member).count()
+
+    def get_collateral_image_url(self, obj):
+        return self._build_file_url(obj.collateral_image)
+
+    def get_salary_slip_url(self, obj):
+        return self._build_file_url(obj.salary_slip)

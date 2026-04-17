@@ -10,7 +10,7 @@ from rest_framework.pagination import PageNumberPagination
 
 from .models import Member
 from .permissions import IsStaffOrAbove
-from .staff_serializers import (
+from .serializers import (
     PendingMemberListSerializer,
     MemberDetailSerializer,
     MemberVerifySerializer,

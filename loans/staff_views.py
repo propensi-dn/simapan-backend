@@ -7,8 +7,13 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework import status
 
 from members.permissions import IsStaffOrAbove
-from .models import Loan, LoanStatus
-from .serializers import StaffApprovedLoanSerializer, StaffDisbursedLoanSerializer
+from .models import Loan, LoanStatus, Installment, InstallmentStatus
+from .serializers import (
+    StaffApprovedLoanSerializer, 
+    StaffDisbursedLoanSerializer,
+    InstallmentSerializer,
+    BankAccountSerializer,
+)
 
 
 class StandardPagination(PageNumberPagination):
@@ -333,3 +338,80 @@ class StaffLoanDisbursementView(APIView):
             'amount': str(loan.amount),
             'disbursed_at': loan.disbursed_at,
         }, status=status.HTTP_200_OK)
+
+
+class StaffLoanDetailView(APIView):
+    """
+    GET /api/staff/loans/<id>/detail/
+
+    Endpoint untuk mendapatkan detail pinjaman lengkap untuk proses pencairan.
+    Mengembalikan:
+    - Loan info
+    - Installment schedule (preview)
+    - Monthly installment amount
+    - Member bank account
+
+    Response:
+    {
+        "id": 1,
+        "loan_id": "LN-2026-001",
+        "member_name": "John Doe",
+        "amount": "5000000.00",
+        "tenor": 12,
+        "status": "APPROVED",
+        "category_display": "Modal Usaha",
+        "monthly_installment": "450000.00",
+        "total_repayment": "5400000.00",
+        "member_bank_account": {
+            "id": 1,
+            "bank_name": "BCA",
+            "account_number": "123456789",
+            "account_holder": "John Doe"
+        },
+        "installment_schedule": [
+            {
+                "installment_number": 1,
+                "due_date": "2026-05-15",
+                "amount": "450000.00",
+                "principal_component": "416666.67",
+                "interest_component": "33333.33"
+            },
+            ...
+        ]
+    }
+    """
+    permission_classes = [IsStaffOrAbove]
+
+    def get(self, request, pk):
+        try:
+            loan = Loan.objects.select_related('member', 'bank_account').get(pk=pk)
+        except Loan.DoesNotExist:
+            return Response(
+                {'error': 'Pinjaman tidak ditemukan'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Generate preview installment schedule
+        from .services import generate_installment_schedule
+        schedule = generate_installment_schedule(loan)
+
+        # Get member's primary or first bank account
+        member_bank_account = loan.member.bank_accounts.filter(is_primary=True).first()
+        if not member_bank_account:
+            member_bank_account = loan.member.bank_accounts.first()
+
+        return Response({
+            'id': loan.id,
+            'loan_id': loan.loan_id,
+            'member_name': loan.member.full_name,
+            'amount': str(loan.amount),
+            'tenor': loan.tenor,
+            'status': loan.status,
+            'status_display': loan.get_status_display(),
+            'category_display': loan.get_category_display(),
+            'monthly_installment': str(loan.monthly_installment),
+            'total_repayment': str(loan.total_repayment),
+            'member_bank_account': BankAccountSerializer(member_bank_account).data if member_bank_account else None,
+            'installment_schedule': schedule,
+        }, status=status.HTTP_200_OK)
+

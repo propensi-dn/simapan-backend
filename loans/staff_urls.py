@@ -4,9 +4,11 @@ from .staff_views import (
     StaffDisbursedLoansView, 
     StaffLoanDisbursementView,
     StaffLoanDetailView,
+    StaffLoanDashboardView,
 )
 
 urlpatterns = [
+    path('dashboard/', StaffLoanDashboardView.as_view(), name='staff-loan-dashboard'),
     path('approved/', StaffApprovedLoansView.as_view(), name='staff-approved-loans'),
     path('disbursed/', StaffDisbursedLoansView.as_view(), name='staff-disbursed-loans'),
     path('<int:pk>/detail/', StaffLoanDetailView.as_view(), name='staff-loan-detail'),

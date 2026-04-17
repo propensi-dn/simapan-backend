@@ -1,10 +1,12 @@
 from django.utils import timezone
-from datetime import datetime
-from django.db.models import Q, Sum
+from datetime import datetime, timedelta
+from django.db.models import Q, Sum, Count
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 from rest_framework import status
+from collections import defaultdict
+from dateutil.relativedelta import relativedelta
 
 from members.permissions import IsStaffOrAbove
 from .models import Loan, LoanStatus, Installment, InstallmentStatus
@@ -415,3 +417,183 @@ class StaffLoanDetailView(APIView):
             'installment_schedule': schedule,
         }, status=status.HTTP_200_OK)
 
+
+class StaffLoanDashboardView(APIView):
+    """
+    GET /api/staff/loans/dashboard/
+
+    Endpoint untuk dashboard aktivitas pinjaman staff. Mengembalikan:
+    1. Total pinjaman berstatus APPROVED
+    2. Aktivitas loan dalam bentuk chart data (6 bulan terakhir)
+    3. Total pembayaran angsuran yang belum terverifikasi
+    4. Total pinjaman overdue
+    5. Daftar pinjaman mendekati due date (2 minggu ke depan)
+
+    Query Parameters:
+    - page: nomor halaman untuk upcoming due loans (default: 1)
+    - page_size: jumlah item per halaman (default: 10, max: 100)
+
+    Response:
+    {
+        "summary": {
+            "total_approved_loans": 5,
+            "total_approved_amount": "25000000.00",
+            "total_unverified_installments": 12,
+            "total_unverified_amount": "5400000.00",
+            "total_overdue_loans": 2,
+            "total_overdue_amount": "3200000.00"
+        },
+        "loan_activities": [
+            {"month": "2025-11", "count": 5, "amount": "25000000.00"},
+            {"month": "2025-12", "count": 3, "amount": "18000000.00"},
+            ...
+        ],
+        "upcoming_due_loans": {
+            "count": 8,
+            "total_pages": 1,
+            "current_page": 1,
+            "page_size": 10,
+            "results": [
+                {
+                    "id": 1,
+                    "loan_id": "LN-2026-001",
+                    "member_name": "John Doe",
+                    "amount": "5000000.00",
+                    "remaining_balance": "4200000.00",
+                    "next_due_date": "2026-05-15",
+                    "status": "ACTIVE",
+                    "days_until_due": 7
+                },
+                ...
+            ]
+        }
+    }
+    """
+    permission_classes = [IsStaffOrAbove]
+
+    def get(self, request):
+        # 1. Total APPROVED loans
+        approved_loans = Loan.objects.filter(status=LoanStatus.APPROVED)
+        total_approved_loans = approved_loans.count()
+        total_approved_amount = approved_loans.aggregate(total=Sum('amount'))['total'] or 0
+
+        # 2. Loan activities - last 6 months
+        loan_activities = self._get_loan_activities()
+
+        # 3. Unverified installment payments
+        unverified_installments = Installment.objects.filter(
+            status=InstallmentStatus.PENDING,
+            submitted_at__isnull=False,
+            verified_by__isnull=True
+        )
+        total_unverified_installments = unverified_installments.count()
+        total_unverified_amount = unverified_installments.aggregate(total=Sum('amount'))['total'] or 0
+
+        # 4. Overdue loans
+        today = timezone.now().date()
+        overdue_loans = Loan.objects.filter(
+            status=LoanStatus.OVERDUE
+        )
+        total_overdue_loans = overdue_loans.count()
+        total_overdue_amount = overdue_loans.aggregate(total=Sum('amount'))['total'] or 0
+
+        # 5. Upcoming due loans (2 minggu ke depan)
+        upcoming_due_loans = self._get_upcoming_due_loans(request)
+
+        return Response({
+            'summary': {
+                'total_approved_loans': total_approved_loans,
+                'total_approved_amount': str(total_approved_amount),
+                'total_unverified_installments': total_unverified_installments,
+                'total_unverified_amount': str(total_unverified_amount),
+                'total_overdue_loans': total_overdue_loans,
+                'total_overdue_amount': str(total_overdue_amount),
+            },
+            'loan_activities': loan_activities,
+            'upcoming_due_loans': upcoming_due_loans.data,
+        }, status=status.HTTP_200_OK)
+
+    def _get_loan_activities(self):
+        """
+        Get loan disbursement activities for the last 6 months grouped by month.
+        Returns data for bar chart.
+        """
+        today = timezone.now().date()
+        six_months_ago = today - relativedelta(months=6)
+
+        # Get all disbursed loans in the last 6 months
+        disbursed_loans = Loan.objects.filter(
+            disbursed_at__date__gte=six_months_ago,
+            disbursed_at__isnull=False
+        ).values(
+            'disbursed_at__year',
+            'disbursed_at__month'
+        ).annotate(
+            count=Count('id'),
+            amount=Sum('amount')
+        ).order_by('disbursed_at__year', 'disbursed_at__month')
+
+        # Create month range for the last 6 months
+        activities = []
+        for i in range(6):
+            month_date = today - relativedelta(months=5-i)
+            year = month_date.year
+            month = month_date.month
+            month_str = month_date.strftime('%Y-%m')
+
+            # Find data for this month
+            month_data = next(
+                (d for d in disbursed_loans 
+                 if d['disbursed_at__year'] == year and d['disbursed_at__month'] == month),
+                None
+            )
+
+            activities.append({
+                'month': month_str,
+                'count': month_data['count'] if month_data else 0,
+                'amount': str(month_data['amount']) if month_data else '0.00',
+            })
+
+        return activities
+
+    def _get_upcoming_due_loans(self, request):
+        """
+        Get loans approaching due date (within 2 weeks).
+        """
+        today = timezone.now().date()
+        two_weeks_later = today + timedelta(days=14)
+
+        # Get all active/overdue loans with upcoming installments
+        loans_with_upcoming = Loan.objects.filter(
+            status__in=[LoanStatus.ACTIVE, LoanStatus.OVERDUE],
+            disbursed_at__isnull=False
+        ).select_related('member').prefetch_related('installments')
+
+        upcoming_loans = []
+        for loan in loans_with_upcoming:
+            # Get next unpaid installment
+            next_installment = loan.installments.filter(
+                status__in=[InstallmentStatus.UNPAID, InstallmentStatus.PENDING]
+            ).order_by('due_date').first()
+
+            if next_installment and next_installment.due_date <= two_weeks_later:
+                days_until_due = (next_installment.due_date - today).days
+                upcoming_loans.append({
+                    'id': loan.id,
+                    'loan_id': loan.loan_id,
+                    'member_name': loan.member.full_name,
+                    'amount': str(loan.amount),
+                    'remaining_balance': str(loan.outstanding_balance),
+                    'next_due_date': str(next_installment.due_date),
+                    'status': loan.status,
+                    'days_until_due': days_until_due,
+                })
+
+        # Sort by due date
+        upcoming_loans.sort(key=lambda x: x['next_due_date'])
+
+        # Paginate
+        paginator = StandardPagination()
+        page = paginator.paginate_queryset(upcoming_loans, request)
+
+        return paginator.get_paginated_response(page)

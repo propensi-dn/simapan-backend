@@ -86,6 +86,7 @@ INSTALLED_APPS = [
     'savings',
     'notifications',
     'config',
+    'loans',
 ]
 
 MIDDLEWARE = [
@@ -158,6 +159,7 @@ CLOUDINARY_STORAGE = {
 
 CSRF_TRUSTED_ORIGINS = [
     'https://empirical-harrietta-simapan-6d52f2ea.koyeb.app',
+    'http://localhost:3000',
 ]
 
 # Password validation

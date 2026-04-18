@@ -24,8 +24,11 @@ urlpatterns = [
     path('api/auth/', include('users.urls')),
     path('api/members/', include('members.urls')),
     path('api/staff/members/', include('members.staff_urls')),
+    path('api/staff/loans/', include('loans.staff_urls')),
+    path('api/manager/loans/', include('loans.manager_urls')),
     path('api/savings/', include('savings.urls')),
     path('api/notifications/', include('notifications.urls')),
     path('api/verifications/', include('verifications.urls')),
     path('api/config/', include('config.urls')),
+    path('api/loans/', include('loans.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

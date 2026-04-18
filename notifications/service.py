@@ -1,16 +1,4 @@
-"""
-notifications/service.py
-
-Helper functions untuk membuat notifikasi dari views lain.
-Import dan panggil fungsi ini setiap kali ada event yang perlu dinotifikasi.
-
-Contoh penggunaan:
-    from notifications.service import notify_member_verified
-    notify_member_verified(member)
-"""
-
 from .models import Notification
-
 
 # ── Registration ───────────────────────────────────────────────────────────
 
@@ -19,12 +7,12 @@ def notify_registration_pending(member):
     Notification.objects.create(
         recipient=member.user,
         type='REGISTRATION',
-        title='Registration Received',
+        title='Pendaftaran Diterima',
         message=(
-            'Your membership registration has been received and is currently under review. '
-            'We will notify you once the verification is complete.'
+            'Pendaftaran keanggotaan Anda telah kami terima dan sedang dalam proses review. '
+            'Kami akan mengirim notifikasi apabila verifikasi selesai.'
         ),
-        redirect_url='/dashboard/member',
+        redirect_url='/status',
     )
 
 
@@ -33,10 +21,10 @@ def notify_registration_verified(member):
     Notification.objects.create(
         recipient=member.user,
         type='REGISTRATION',
-        title='Registration Approved',
+        title='Pendaftaran Disetujui',
         message=(
-            'Congratulations! Your membership registration has been approved. '
-            'You can now access all member features.'
+            'Selamat! Pendaftaran keanggotaan Anda telah disetujui. '
+            'Silakan lakukan setoran simpanan pokok untuk mengaktifkan keanggotaan.'
         ),
         redirect_url='/dashboard/member',
     )
@@ -44,13 +32,13 @@ def notify_registration_verified(member):
 
 def notify_registration_rejected(member, reason=''):
     """Dipanggil saat staff tolak registrasi member."""
-    message = 'Your membership registration has been rejected.'
+    message = 'Pendaftaran keanggotaan Anda ditolak.'
     if reason:
-        message += f' Reason: {reason}'
+        message += f' Alasan: {reason}'
     Notification.objects.create(
         recipient=member.user,
         type='REGISTRATION',
-        title='Registration Rejected',
+        title='Pendaftaran Ditolak',
         message=message,
         redirect_url='/status',
     )
@@ -63,12 +51,12 @@ def notify_saving_received(saving):
     Notification.objects.create(
         recipient=saving.member.user,
         type='SAVING',
-        title='Deposit Received',
+        title='Setoran Diterima',
         message=(
-            f'Your deposit of {saving.saving_type} ({saving.saving_id}) has been received '
-            'and is awaiting verification by our staff.'
+            f'Setoran {saving.saving_type} ({saving.saving_id}) telah kami terima '
+            'dan menunggu verifikasi petugas.'
         ),
-        redirect_url=f'/dashboard/member/savings',
+        redirect_url='/savings',
     )
 
 
@@ -77,27 +65,27 @@ def notify_saving_verified(saving):
     Notification.objects.create(
         recipient=saving.member.user,
         type='SAVING',
-        title='Deposit Verified',
+        title='Setoran Terverifikasi',
         message=(
-            f'Your deposit ({saving.saving_id}) has been successfully verified '
-            f'and added to your savings balance.'
+            f'Setoran Anda ({saving.saving_id}) telah berhasil diverifikasi '
+            'dan ditambahkan ke saldo simpanan.'
         ),
-        redirect_url='/dashboard/member/savings',
+        redirect_url='/savings',
     )
 
 
 def notify_saving_rejected(saving, reason=''):
     """Dipanggil saat staff tolak setoran."""
-    message = f'Your deposit ({saving.saving_id}) could not be verified.'
+    message = f'Setoran ({saving.saving_id}) tidak dapat diverifikasi.'
     if reason:
-        message += f' Reason: {reason}'
-    message += ' Please resubmit with a valid proof of transfer.'
+        message += f' Alasan: {reason}'
+    message += ' Silakan submit ulang dengan bukti transfer yang valid.'
     Notification.objects.create(
         recipient=saving.member.user,
         type='SAVING',
-        title='Deposit Rejected',
+        title='Setoran Ditolak',
         message=message,
-        redirect_url='/dashboard/member/savings',
+        redirect_url='/savings',
     )
 
 
@@ -108,10 +96,10 @@ def notify_loan_submitted(loan):
     Notification.objects.create(
         recipient=loan.member.user,
         type='LOAN',
-        title='Loan Application Submitted',
+        title='Pengajuan Pinjaman Diterima',
         message=(
-            f'Your loan application ({loan.loan_id}) has been submitted '
-            'and is awaiting manager review.'
+            f'Pengajuan pinjaman Anda ({loan.loan_id}) telah dikirim '
+            'dan menunggu review manajer.'
         ),
         redirect_url=f'/dashboard/member/loans/{loan.id}',
     )
@@ -122,10 +110,10 @@ def notify_loan_approved(loan):
     Notification.objects.create(
         recipient=loan.member.user,
         type='LOAN',
-        title='Loan Approved',
+        title='Pinjaman Disetujui',
         message=(
-            f'Your loan application ({loan.loan_id}) has been approved. '
-            'The funds will be disbursed to your registered bank account shortly.'
+            f'Pengajuan pinjaman Anda ({loan.loan_id}) telah disetujui. '
+            'Dana akan segera dicairkan ke rekening bank Anda.'
         ),
         redirect_url=f'/dashboard/member/loans/{loan.id}',
     )
@@ -133,13 +121,13 @@ def notify_loan_approved(loan):
 
 def notify_loan_rejected(loan, reason=''):
     """Dipanggil saat manager tolak pinjaman."""
-    message = f'Your loan application ({loan.loan_id}) has been rejected.'
+    message = f'Pengajuan pinjaman Anda ({loan.loan_id}) ditolak.'
     if reason:
-        message += f' Reason: {reason}'
+        message += f' Alasan: {reason}'
     Notification.objects.create(
         recipient=loan.member.user,
         type='LOAN',
-        title='Loan Rejected',
+        title='Pinjaman Ditolak',
         message=message,
         redirect_url=f'/dashboard/member/loans/{loan.id}',
     )
@@ -150,26 +138,90 @@ def notify_loan_disbursed(loan):
     Notification.objects.create(
         recipient=loan.member.user,
         type='LOAN',
-        title='Loan Disbursed',
+        title='Dana Pinjaman Dicairkan',
         message=(
-            f'Your loan ({loan.loan_id}) has been disbursed. '
-            'Please check your bank account.'
+            f'Dana pinjaman ({loan.loan_id}) telah dicairkan. '
+            'Silakan cek rekening bank Anda.'
+        ),
+        redirect_url=f'/dashboard/member/loans/{loan.id}',
+    )
+
+
+def notify_installment_submitted(installment):
+    """Dipanggil saat member submit pembayaran cicilan (via transfer / simpanan)."""
+    loan = installment.loan
+    Notification.objects.create(
+        recipient=loan.member.user,
+        type='LOAN',
+        title='Pembayaran Cicilan Dikirim',
+        message=(
+            f'Laporan pembayaran cicilan ke-{installment.installment_number} '
+            f'untuk pinjaman {loan.loan_id} telah dikirim '
+            'dan menunggu verifikasi petugas.'
         ),
         redirect_url=f'/dashboard/member/loans/{loan.id}',
     )
 
 
 def notify_installment_recorded(installment):
-    """Dipanggil saat staff record pembayaran angsuran."""
+    """Dipanggil saat staff verifikasi pembayaran cicilan → PAID."""
+    loan = installment.loan
     Notification.objects.create(
-        recipient=installment.loan.member.user,
+        recipient=loan.member.user,
         type='LOAN',
-        title='Installment Payment Recorded',
+        title='Pembayaran Cicilan Terverifikasi',
         message=(
-            f'Your installment payment for loan {installment.loan.loan_id} '
-            f'has been successfully recorded.'
+            f'Pembayaran cicilan ke-{installment.installment_number} '
+            f'untuk pinjaman {loan.loan_id} telah berhasil diverifikasi.'
         ),
-        redirect_url=f'/dashboard/member/loans/{installment.loan.id}',
+        redirect_url=f'/dashboard/member/loans/{loan.id}',
+    )
+
+
+def notify_installment_rejected(installment, reason=''):
+    """Dipanggil saat staff tolak pembayaran cicilan."""
+    loan = installment.loan
+    message = (
+        f'Pembayaran cicilan ke-{installment.installment_number} '
+        f'untuk pinjaman {loan.loan_id} ditolak.'
+    )
+    if reason:
+        message += f' Alasan: {reason}'
+    message += ' Silakan submit ulang dengan bukti transfer yang valid.'
+    Notification.objects.create(
+        recipient=loan.member.user,
+        type='LOAN',
+        title='Pembayaran Cicilan Ditolak',
+        message=message,
+        redirect_url=f'/dashboard/member/loans/{loan.id}',
+    )
+
+
+def notify_loan_lunas(loan):
+    """Dipanggil saat seluruh cicilan pinjaman telah terbayar → LUNAS."""
+    Notification.objects.create(
+        recipient=loan.member.user,
+        type='LOAN',
+        title='Pinjaman Lunas',
+        message=(
+            f'Selamat! Pinjaman Anda ({loan.loan_id}) telah lunas. '
+            'Terima kasih telah memenuhi kewajiban pembayaran tepat waktu.'
+        ),
+        redirect_url=f'/dashboard/member/loans/{loan.id}',
+    )
+
+
+def notify_loan_overdue(loan):
+    """Dipanggil saat pinjaman masuk status OVERDUE."""
+    Notification.objects.create(
+        recipient=loan.member.user,
+        type='LOAN',
+        title='Pinjaman Anda Overdue',
+        message=(
+            f'Pinjaman Anda ({loan.loan_id}) telah melewati tanggal jatuh tempo. '
+            'Mohon segera lakukan pembayaran untuk menghindari penalti tambahan.'
+        ),
+        redirect_url=f'/dashboard/member/loans/{loan.id}',
     )
 
 
@@ -180,10 +232,10 @@ def notify_withdrawal_received(withdrawal):
     Notification.objects.create(
         recipient=withdrawal.member.user,
         type='WITHDRAWAL',
-        title='Withdrawal Request Received',
+        title='Permintaan Penarikan Diterima',
         message=(
-            f'Your savings withdrawal request has been received '
-            'and is being processed by our staff.'
+            'Permintaan penarikan simpanan Anda telah diterima '
+            'dan sedang diproses oleh petugas.'
         ),
         redirect_url='/dashboard/member/withdrawals',
     )
@@ -194,10 +246,10 @@ def notify_withdrawal_processed(withdrawal):
     Notification.objects.create(
         recipient=withdrawal.member.user,
         type='WITHDRAWAL',
-        title='Withdrawal Processed',
+        title='Penarikan Diproses',
         message=(
-            'Your savings withdrawal has been processed. '
-            'The funds will be transferred to your registered bank account.'
+            'Permintaan penarikan simpanan Anda telah diproses. '
+            'Dana akan ditransfer ke rekening bank terdaftar.'
         ),
         redirect_url='/dashboard/member/withdrawals',
     )
@@ -210,10 +262,10 @@ def notify_resignation_received(resignation):
     Notification.objects.create(
         recipient=resignation.member.user,
         type='RESIGNATION',
-        title='Resignation Request Received',
+        title='Permintaan Pengunduran Diri Diterima',
         message=(
-            'Your membership resignation request has been received '
-            'and is awaiting manager approval.'
+            'Permintaan pengunduran diri Anda telah diterima '
+            'dan menunggu persetujuan manajer.'
         ),
         redirect_url='/dashboard/member/resignation',
     )
@@ -224,10 +276,10 @@ def notify_resignation_approved(resignation):
     Notification.objects.create(
         recipient=resignation.member.user,
         type='RESIGNATION',
-        title='Resignation Approved',
+        title='Pengunduran Diri Disetujui',
         message=(
-            'Your membership resignation has been approved. '
-            'Your savings refund will be processed shortly.'
+            'Permintaan pengunduran diri Anda telah disetujui. '
+            'Pengembalian simpanan akan segera diproses.'
         ),
         redirect_url='/dashboard/member',
     )

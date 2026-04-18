@@ -115,7 +115,18 @@ class MemberVerifyView(APIView):
         member.verified_at = timezone.now()
         member.save(update_fields=['status', 'rejection_reason', 'verified_by', 'verified_at'])
 
+        # Kirim email notifikasi
         self._send_status_email(member, action)
+
+        # Trigger in-app notification
+        try:
+            from notifications.service import notify_registration_verified, notify_registration_rejected
+            if action == 'approve':
+                notify_registration_verified(member)
+            else:
+                notify_registration_rejected(member, member.rejection_reason or '')
+        except Exception:
+            pass
 
         updated_serializer = MemberDetailSerializer(member, context={'request': request})
         return Response(
@@ -165,5 +176,4 @@ class MemberVerifyView(APIView):
                 fail_silently=True,
             )
         except Exception:
-            # Kegagalan pengiriman email tidak boleh mengganggu proses verifikasi
             pass

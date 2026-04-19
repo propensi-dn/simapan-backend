@@ -1,5 +1,6 @@
 from django.db import models
 from django.utils import timezone
+from decimal import Decimal
 from members.models import Member, BankAccount
 from users.models import User
 
@@ -41,7 +42,7 @@ class BadDebtStatus(models.TextChoices):
 
 class Loan(models.Model):
     TENOR_CHOICES = [(6, '6 Bulan'), (12, '12 Bulan'), (24, '24 Bulan'), (36, '36 Bulan')]
-    INTEREST_RATE = 0.005  # 0.5% flat per bulan
+    INTEREST_RATE = Decimal('0.005')  # 0.5% flat per bulan
 
     member              = models.ForeignKey(Member, on_delete=models.CASCADE, related_name='loans')
     loan_id             = models.CharField(max_length=30, unique=True, blank=True)

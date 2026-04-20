@@ -262,7 +262,7 @@ class InstallmentPayView(APIView):
 
         # ── SAVINGS (Sukarela) ───────────────────────────────────
         try:
-            balance = SavingsBalance.objects.select_for_update().get(member=member)
+            balance = SavingsBalance.objects.get(member=member)
         except SavingsBalance.DoesNotExist:
             return Response(
                 {'error': 'Anda belum memiliki saldo simpanan.'},

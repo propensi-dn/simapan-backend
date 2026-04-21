@@ -1,0 +1,457 @@
+from django.utils import timezone
+from datetime import date, timedelta
+from django.db.models import Sum, Q
+from django.db.models import Count
+from django.db.models.functions import TruncMonth
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.pagination import PageNumberPagination
+from rest_framework import status
+
+from members.permissions import IsManagerOrAbove
+from .models import Loan, LoanStatus, Installment, InstallmentStatus
+from .serializers import (
+    ManagerPendingLoanSerializer,
+    ManagerLoanHistorySerializer,
+    ManagerAllLoanSerializer,
+    ManagerLoanDetailSerializer,
+    ManagerMemberLoanHistoryItemSerializer,
+)
+
+
+class StandardPagination(PageNumberPagination):
+    page_size = 10
+    page_size_query_param = 'page_size'
+    max_page_size = 100
+
+    def get_paginated_data(self, data):
+        return {
+            'count': self.page.paginator.count,
+            'total_pages': self.page.paginator.num_pages,
+            'current_page': self.page.number,
+            'page_size': self.get_page_size(self.request),
+            'next': self.get_next_link(),
+            'previous': self.get_previous_link(),
+            'results': data,
+        }
+
+
+class AllLoansPagination(StandardPagination):
+    page_query_param = 'all_page'
+    page_size_query_param = 'all_page_size'
+
+
+class ManagerPendingLoansView(APIView):
+    """
+    GET /api/manager/loans/pending/
+
+    Mengembalikan:
+    - ringkasan total pinjaman pending dan total requested amount
+    - daftar pinjaman pending (search, sort, pagination)
+    - history pinjaman yang pernah APPROVED/REJECTED
+    """
+    permission_classes = [IsManagerOrAbove]
+
+    def get(self, request):
+        search = request.query_params.get('search', '').strip()
+        sort = request.query_params.get('sort', '-application_date').strip() or '-application_date'
+        history_limit = request.query_params.get('history_limit', '20').strip()
+        history_search = request.query_params.get('history_search', '').strip()
+        history_status = request.query_params.get('history_status', '').strip().upper()
+        all_search = request.query_params.get('all_search', '').strip()
+        all_status = request.query_params.get('all_status', '').strip().upper()
+
+        allowed_sorts = {'application_date', '-application_date'}
+        if sort not in allowed_sorts:
+            sort = '-application_date'
+
+        pending_queryset = (
+            Loan.objects
+            .filter(status=LoanStatus.PENDING)
+            .select_related('member')
+            .order_by(sort, '-id')
+        )
+
+        if search:
+            pending_queryset = pending_queryset.filter(
+                Q(member__full_name__icontains=search)
+            )
+
+        pending_summary_qs = Loan.objects.filter(status=LoanStatus.PENDING)
+        total_pending = pending_summary_qs.count()
+        total_requested_amount = pending_summary_qs.aggregate(total=Sum('amount'))['total'] or 0
+        total_approved = Loan.objects.filter(status=LoanStatus.APPROVED).count()
+        total_overdue = Loan.objects.filter(status=LoanStatus.OVERDUE).count()
+        total_unverified_installments = Installment.objects.filter(status=InstallmentStatus.PENDING).count()
+
+        paginator = StandardPagination()
+        pending_page = paginator.paginate_queryset(pending_queryset, request)
+        pending_serializer = ManagerPendingLoanSerializer(pending_page, many=True)
+        pending_payload = paginator.get_paginated_data(pending_serializer.data)
+
+        try:
+            parsed_history_limit = max(1, min(int(history_limit), 100))
+        except ValueError:
+            parsed_history_limit = 20
+
+        history_queryset = (
+            Loan.objects
+            .filter(status__in=[LoanStatus.APPROVED, LoanStatus.REJECTED])
+            .select_related('member', 'reviewed_by')
+        )
+
+        if history_status in [LoanStatus.APPROVED, LoanStatus.REJECTED]:
+            history_queryset = history_queryset.filter(status=history_status)
+
+        if history_search:
+            history_queryset = history_queryset.filter(
+                Q(member__full_name__icontains=history_search)
+                | Q(loan_id__icontains=history_search)
+            )
+
+        history_queryset = history_queryset.order_by('-reviewed_at', '-application_date', '-id')[:parsed_history_limit]
+        history_serializer = ManagerLoanHistorySerializer(history_queryset, many=True)
+
+        # Tabel all loans (server-side search/filter/pagination)
+        all_loans_queryset = Loan.objects.select_related('member').order_by('-application_date', '-id')
+
+        if all_search:
+            all_loans_queryset = all_loans_queryset.filter(
+                Q(member__full_name__icontains=all_search)
+                | Q(loan_id__icontains=all_search)
+            )
+
+        valid_statuses = {choice[0] for choice in LoanStatus.choices}
+        if all_status in valid_statuses:
+            all_loans_queryset = all_loans_queryset.filter(status=all_status)
+
+        all_paginator = AllLoansPagination()
+        all_page = all_paginator.paginate_queryset(all_loans_queryset, request)
+        all_serializer = ManagerAllLoanSerializer(all_page, many=True)
+        all_payload = all_paginator.get_paginated_data(all_serializer.data)
+
+        # Loan activity barchart (6 bulan terakhir)
+        today = timezone.now().date()
+        month_starts = []
+        for offset in range(5, -1, -1):
+            y = today.year
+            m = today.month - offset
+            while m <= 0:
+                m += 12
+                y -= 1
+            month_starts.append(date(y, m, 1))
+
+        activity_qs = (
+            Loan.objects
+            .filter(application_date__date__gte=month_starts[0])
+            .annotate(month=TruncMonth('application_date'))
+            .values('month')
+            .annotate(total=Count('id'))
+            .order_by('month')
+        )
+        activity_map = {
+            item['month'].date().replace(day=1): item['total']
+            for item in activity_qs
+            if item.get('month')
+        }
+        loan_activity_barchart = [
+            {
+                'month': ms.strftime('%b').upper(),
+                'total': activity_map.get(ms, 0),
+            }
+            for ms in month_starts
+        ]
+
+        # Loan mendekati due date (2 minggu ke depan)
+        near_due_limit_raw = request.query_params.get('near_due_limit', '20').strip()
+        try:
+            near_due_limit = max(1, min(int(near_due_limit_raw), 100))
+        except ValueError:
+            near_due_limit = 20
+
+        due_until = today + timedelta(days=14)
+        near_due_installments = (
+            Installment.objects
+            .filter(
+                status__in=[InstallmentStatus.UNPAID, InstallmentStatus.PENDING],
+                due_date__gte=today,
+                due_date__lte=due_until,
+                loan__status__in=[LoanStatus.ACTIVE, LoanStatus.OVERDUE],
+            )
+            .select_related('loan', 'loan__member')
+            .order_by('due_date', 'loan__id')
+        )
+
+        near_due_loans = []
+        seen_loan_ids = set()
+        for inst in near_due_installments:
+            loan = inst.loan
+            if loan.id in seen_loan_ids:
+                continue
+            seen_loan_ids.add(loan.id)
+
+            near_due_loans.append({
+                'id': loan.id,
+                'member_name': loan.member.full_name,
+                'loan_id': loan.loan_id,
+                'remaining_balance': loan.outstanding_balance,
+                'due_date': inst.due_date,
+                'status': loan.status,
+                'status_display': loan.get_status_display(),
+                'detail_url': f'/dashboard/manager/loans/{loan.id}',
+            })
+
+            if len(near_due_loans) >= near_due_limit:
+                break
+
+        return Response({
+            'summary': {
+                'total_pending': total_pending,
+                'total_requested_amount': total_requested_amount,
+                'total_approved': total_approved,
+                'total_unverified_installments': total_unverified_installments,
+                'total_overdue': total_overdue,
+            },
+            'pending_loans': pending_payload,
+            'history_loans': history_serializer.data,
+            'all_loans': all_payload,
+            'loan_activity_barchart': loan_activity_barchart,
+            'near_due_loans': near_due_loans,
+        })
+
+
+class ManagerLoanDetailView(APIView):
+    """
+    GET /api/manager/loans/{id}/
+
+    Mengembalikan detail pengajuan pinjaman untuk review manager,
+    termasuk financial health member, dokumen pendukung, dan riwayat pinjaman.
+    """
+    permission_classes = [IsManagerOrAbove]
+
+    def get(self, request, pk):
+        try:
+            loan = Loan.objects.select_related('member', 'member__savings_balance').get(pk=pk)
+        except Loan.DoesNotExist:
+            return Response({'error': 'Pinjaman tidak ditemukan'}, status=404)
+
+        detail_serializer = ManagerLoanDetailSerializer(loan, context={'request': request})
+
+        previous_loans_qs = (
+            loan.member.loans
+            .exclude(pk=loan.pk)
+            .exclude(status=LoanStatus.PENDING)
+            .order_by('-application_date', '-id')[:10]
+        )
+        previous_loans_serializer = ManagerMemberLoanHistoryItemSerializer(previous_loans_qs, many=True)
+
+        credit_score = detail_serializer.data['credit_score']['score']
+        savings_total = detail_serializer.data['total_savings']
+        active_loans_count = detail_serializer.data['active_loans_count']
+        bad_debt_history_count = detail_serializer.data['bad_debt_history_count']
+
+        # Skor kelayakan sederhana untuk scorecard manager (0-100)
+        eligibility_score = 50
+        if credit_score >= 750:
+            eligibility_score += 25
+        elif credit_score >= 650:
+            eligibility_score += 15
+        elif credit_score >= 500:
+            eligibility_score += 5
+
+        try:
+            savings_total_num = float(savings_total)
+        except (TypeError, ValueError):
+            savings_total_num = 0.0
+
+        if savings_total_num >= 5_000_000:
+            eligibility_score += 15
+        elif savings_total_num >= 1_000_000:
+            eligibility_score += 8
+
+        if active_loans_count == 0:
+            eligibility_score += 10
+        elif active_loans_count >= 3:
+            eligibility_score -= 5
+
+        if bad_debt_history_count > 0:
+            eligibility_score -= min(20, bad_debt_history_count * 10)
+
+        eligibility_score = max(0, min(100, eligibility_score))
+
+        monthly_income_proxy_ok = savings_total_num >= float(loan.amount) * 0.1
+        collateral_ratio = 140 if loan.collateral_image else 0
+        has_bad_debt = bad_debt_history_count > 0
+
+        risk_assessment = [
+            {
+                'label': 'Indikasi kapasitas bayar memadai berdasarkan total simpanan member.',
+                'passed': monthly_income_proxy_ok,
+            },
+            {
+                'label': f'Bukti jaminan tersedia dengan estimasi coverage {collateral_ratio}% dari nilai pinjaman.',
+                'passed': bool(loan.collateral_image),
+            },
+            {
+                'label': (
+                    'Tidak ditemukan riwayat kredit macet aktif.'
+                    if not has_bad_debt
+                    else f'Ditemukan riwayat kredit macet sebanyak {bad_debt_history_count} kasus.'
+                ),
+                'passed': not has_bad_debt,
+            },
+        ]
+
+        return Response({
+            'loan': detail_serializer.data,
+            'member_previous_loans': previous_loans_serializer.data,
+            'scorecard': {
+                'eligibility_score': eligibility_score,
+                'indicators': [
+                    {
+                        'label': 'Credit score member',
+                        'value': detail_serializer.data['credit_score']['score'],
+                    },
+                    {
+                        'label': 'Total simpanan member',
+                        'value': detail_serializer.data['total_savings'],
+                    },
+                    {
+                        'label': 'Pinjaman aktif member',
+                        'value': detail_serializer.data['active_loans_count'],
+                    },
+                    {
+                        'label': 'Riwayat kredit macet',
+                        'value': detail_serializer.data['bad_debt_history_count'],
+                    },
+                ],
+            },
+            'risk_assessment': risk_assessment,
+        })
+
+    def post(self, request, pk):
+        """
+        POST /api/manager/loans/{id}/
+
+        Body:
+          {"action": "approve"}
+          {"action": "reject", "reason": "..."}
+        """
+        try:
+            loan = Loan.objects.select_related('member', 'member__user').get(pk=pk)
+        except Loan.DoesNotExist:
+            return Response({'error': 'Pinjaman tidak ditemukan'}, status=status.HTTP_404_NOT_FOUND)
+
+        if loan.status != LoanStatus.PENDING:
+            return Response(
+                {'error': f'Hanya pinjaman status PENDING yang dapat direview. Status saat ini: {loan.status}.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        action = str(request.data.get('action', '')).strip().lower()
+        reason = str(request.data.get('reason', '')).strip()
+
+        if action not in ['approve', 'reject']:
+            return Response(
+                {'error': 'Action tidak valid. Gunakan approve atau reject.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if action == 'reject' and not reason:
+            return Response(
+                {'reason': 'Alasan penolakan wajib diisi.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        loan.reviewed_by = request.user
+        loan.reviewed_at = timezone.now()
+
+        if action == 'approve':
+            loan.status = LoanStatus.APPROVED
+            loan.rejection_reason = ''
+        else:
+            loan.status = LoanStatus.REJECTED
+            loan.rejection_reason = reason
+
+        loan.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'rejection_reason', 'updated_at'])
+
+        try:
+            from notifications.service import notify_loan_approved, notify_loan_rejected
+            if action == 'approve':
+                notify_loan_approved(loan)
+            else:
+                notify_loan_rejected(loan, reason)
+        except Exception:
+            pass
+
+        return Response({
+            'message': 'Pinjaman berhasil di-approve.' if action == 'approve' else 'Pinjaman berhasil di-reject.',
+            'loan_id': loan.loan_id,
+            'status': loan.status,
+        })
+
+
+class ManagerLoanStatusUpdateView(APIView):
+    """
+    POST /api/manager/loans/{id}/status/
+
+    Body:
+      {"action": "approve"}
+      {"action": "reject", "reason": "..."}
+    """
+    permission_classes = [IsManagerOrAbove]
+
+    def post(self, request, pk):
+        try:
+            loan = Loan.objects.select_related('member', 'member__user').get(pk=pk)
+        except Loan.DoesNotExist:
+            return Response({'error': 'Pinjaman tidak ditemukan'}, status=status.HTTP_404_NOT_FOUND)
+
+        if loan.status != LoanStatus.PENDING:
+            return Response(
+                {'error': f'Hanya pinjaman status PENDING yang dapat direview. Status saat ini: {loan.status}.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        action = str(request.data.get('action', '')).strip().lower()
+        reason = str(request.data.get('reason', '')).strip()
+
+        if action not in ['approve', 'reject']:
+            return Response(
+                {'error': 'Action tidak valid. Gunakan approve atau reject.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if action == 'reject' and not reason:
+            return Response(
+                {'reason': 'Alasan penolakan wajib diisi.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        loan.reviewed_by = request.user
+        loan.reviewed_at = timezone.now()
+
+        if action == 'approve':
+            loan.status = LoanStatus.APPROVED
+            loan.rejection_reason = ''
+        else:
+            loan.status = LoanStatus.REJECTED
+            loan.rejection_reason = reason
+
+        loan.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'rejection_reason', 'updated_at'])
+
+        try:
+            from notifications.service import notify_loan_approved, notify_loan_rejected
+            if action == 'approve':
+                notify_loan_approved(loan)
+            else:
+                notify_loan_rejected(loan, reason)
+        except Exception:
+            pass
+
+        return Response({
+            'message': 'Pinjaman berhasil di-approve.' if action == 'approve' else 'Pinjaman berhasil di-reject.',
+            'loan_id': loan.loan_id,
+            'status': loan.status,
+        })

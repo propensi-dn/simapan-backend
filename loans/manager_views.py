@@ -126,7 +126,12 @@ class ManagerPendingLoansView(APIView):
         history_serializer = ManagerLoanHistorySerializer(history_queryset, many=True)
 
         # Tabel all loans (server-side search/filter/pagination)
-        all_loans_queryset = Loan.objects.select_related('member').order_by('-application_date', '-id')
+        all_loans_queryset = (
+            Loan.objects
+            .exclude(status=LoanStatus.PENDING)
+            .select_related('member')
+            .order_by('-application_date', '-id')
+        )
 
         if all_search:
             all_loans_queryset = all_loans_queryset.filter(
@@ -135,7 +140,7 @@ class ManagerPendingLoansView(APIView):
             )
 
         valid_statuses = {choice[0] for choice in LoanStatus.choices}
-        if all_status in valid_statuses:
+        if all_status in valid_statuses and all_status != LoanStatus.PENDING:
             all_loans_queryset = all_loans_queryset.filter(status=all_status)
 
         all_paginator = AllLoansPagination()

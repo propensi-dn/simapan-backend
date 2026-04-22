@@ -1,4 +1,5 @@
 from django.db.models import DecimalField, Sum, Value
+from django.db.models import Q
 from django.db.models.functions import Coalesce
 from rest_framework import permissions, status
 from rest_framework.pagination import PageNumberPagination
@@ -7,7 +8,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from config.models import CooperativeBank
-from savings.models import SavingStatus, SavingTransaction, SavingType
+from loans.models import Installment, InstallmentStatus
+from savings.models import SavingStatus, SavingTransaction, SavingType, SavingsBalance
 from savings.serializers import (
 	DepositCreateSerializer,
 	InitialDepositCreateSerializer,
@@ -154,22 +156,87 @@ class SavingsOverviewView(BaseMemberSavingsView):
 		if status_filter:
 			transactions = transactions.filter(status=status_filter.upper())
 
-		totals_query = SavingTransaction.objects.filter(member=member, status=SavingStatus.SUCCESS)
-		totals = totals_query.values('saving_type').annotate(
-			total=Coalesce(
-				Sum('amount'),
-				Value(0, output_field=DecimalField(max_digits=14, decimal_places=2)),
-			)
-		)
+		deposit_items = SavingTransactionSerializer(
+			transactions,
+			many=True,
+			context={'request': request},
+		).data
 
-		total_wajib = next((item['total'] for item in totals if item['saving_type'] == SavingType.WAJIB), 0)
-		total_sukarela = next((item['total'] for item in totals if item['saving_type'] == SavingType.SUKARELA), 0)
+		loan_savings_qs = Installment.objects.filter(
+			loan__member=member,
+			payment_method='SAVINGS',
+		).filter(
+			Q(submitted_at__isnull=False)
+			| Q(status=InstallmentStatus.UNPAID, rejection_reason__gt='')
+		).select_related('loan')
+
+		loan_savings_items = []
+		for installment in loan_savings_qs:
+			submitted_at_value = installment.submitted_at or installment.updated_at
+			submitted_at_iso = submitted_at_value.isoformat() if submitted_at_value else None
+
+			if installment.status == InstallmentStatus.PAID:
+				mapped_status = SavingStatus.SUCCESS
+			elif installment.status == InstallmentStatus.PENDING:
+				mapped_status = SavingStatus.PENDING
+			else:
+				mapped_status = SavingStatus.REJECTED
+
+			loan_savings_items.append({
+				'id': -installment.id,
+				'saving_id': f'LOAN-{installment.loan.loan_id}-M{installment.installment_number}',
+				'transaction_id': installment.transaction_id or f'TRX-INS-{installment.id:05d}',
+				'saving_type': SavingType.SUKARELA,
+				'amount': str(installment.amount),
+				'status': mapped_status,
+				'transfer_proof': None,
+				'transfer_proof_url': None,
+				'member_bank_name': '',
+				'member_account_number': '',
+				'rejection_reason': installment.rejection_reason or '',
+				'submitted_at': submitted_at_iso,
+				'direction': 'OUT',
+				'source': 'LOAN_INSTALLMENT',
+				'description': f'Pembayaran cicilan {installment.loan.loan_id} - bulan {installment.installment_number} via simpanan sukarela',
+				'loan_pk': installment.loan_id,
+				'loan_id': installment.loan.loan_id,
+				'installment_number': installment.installment_number,
+			})
+
+		combined_items = []
+		for item in deposit_items:
+			combined_items.append({
+				**item,
+				'direction': 'IN',
+				'source': 'SAVINGS_DEPOSIT',
+				'description': '',
+				'loan_pk': None,
+				'loan_id': None,
+				'installment_number': None,
+			})
+
+		combined_items.extend(loan_savings_items)
+		combined_items.sort(key=lambda item: item.get('submitted_at') or '', reverse=True)
+
+		balance = SavingsBalance.objects.filter(member=member).first()
+		if balance:
+			total_wajib = balance.total_wajib or 0
+			total_sukarela = balance.total_sukarela or 0
+		else:
+			totals_query = SavingTransaction.objects.filter(member=member, status=SavingStatus.SUCCESS)
+			totals = totals_query.values('saving_type').annotate(
+				total=Coalesce(
+					Sum('amount'),
+					Value(0, output_field=DecimalField(max_digits=14, decimal_places=2)),
+				)
+			)
+
+			total_wajib = next((item['total'] for item in totals if item['saving_type'] == SavingType.WAJIB), 0)
+			total_sukarela = next((item['total'] for item in totals if item['saving_type'] == SavingType.SUKARELA), 0)
 
 		paginator = SavingsPagination()
-		page = paginator.paginate_queryset(transactions, request)
-		serializer = SavingTransactionSerializer(page, many=True, context={'request': request})
-
-		paginated = paginator.get_paginated_response(serializer.data).data
+		page = paginator.paginate_queryset(combined_items, request, view=self)
+		paginated = paginator.get_paginated_response(page).data
 		paginated['member_status'] = member.status
 		paginated['totals'] = {
 			'wajib': f'{total_wajib}',

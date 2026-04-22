@@ -100,8 +100,8 @@ class Loan(models.Model):
     def outstanding_balance(self):
         paid = self.installments.filter(
             status=InstallmentStatus.PAID
-        ).aggregate(total=models.Sum('principal_component'))['total'] or 0
-        return self.amount - paid
+        ).aggregate(total=models.Sum('amount'))['total'] or Decimal('0')
+        return self.total_repayment - paid
 
     @property
     def next_due_date(self):

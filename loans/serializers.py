@@ -1,5 +1,6 @@
+from django.db.models import Sum
 from rest_framework import serializers
-from .models import Loan, Installment, BadDebt, LoanCategory, LoanStatus
+from .models import Loan, Installment, BadDebt, LoanCategory, LoanStatus, InstallmentStatus
 from .services import simulate_installment
 from members.models import BankAccount
 
@@ -239,7 +240,7 @@ class ManagerLoanHistorySerializer(serializers.ModelSerializer):
 
 class ManagerAllLoanSerializer(serializers.ModelSerializer):
     member_name = serializers.CharField(source='member.full_name', read_only=True)
-    remaining_balance = serializers.DecimalField(source='outstanding_balance', max_digits=14, decimal_places=2, read_only=True)
+    remaining_balance = serializers.SerializerMethodField()
     due_date = serializers.DateField(source='next_due_date', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
 
@@ -254,6 +255,16 @@ class ManagerAllLoanSerializer(serializers.ModelSerializer):
             'status',
             'status_display',
         ]
+
+    def get_remaining_balance(self, obj):
+        total_remaining = (
+            obj.installments
+            .filter(status__in=[InstallmentStatus.UNPAID, InstallmentStatus.PENDING])
+            .aggregate(total=Sum('amount'))['total']
+        )
+        if total_remaining is not None:
+            return total_remaining
+        return obj.outstanding_balance
 
 
 class ManagerMemberLoanHistoryItemSerializer(serializers.ModelSerializer):
@@ -488,7 +499,7 @@ class ManagerLoanHistorySerializer(serializers.ModelSerializer):
 
 class ManagerAllLoanSerializer(serializers.ModelSerializer):
     member_name = serializers.CharField(source='member.full_name', read_only=True)
-    remaining_balance = serializers.DecimalField(source='outstanding_balance', max_digits=14, decimal_places=2, read_only=True)
+    remaining_balance = serializers.SerializerMethodField()
     due_date = serializers.DateField(source='next_due_date', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
 
@@ -503,6 +514,16 @@ class ManagerAllLoanSerializer(serializers.ModelSerializer):
             'status',
             'status_display',
         ]
+
+    def get_remaining_balance(self, obj):
+        total_remaining = (
+            obj.installments
+            .filter(status__in=[InstallmentStatus.UNPAID, InstallmentStatus.PENDING])
+            .aggregate(total=Sum('amount'))['total']
+        )
+        if total_remaining is not None:
+            return total_remaining
+        return obj.outstanding_balance
 
 
 class ManagerMemberLoanHistoryItemSerializer(serializers.ModelSerializer):

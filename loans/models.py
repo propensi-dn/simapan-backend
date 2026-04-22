@@ -86,7 +86,7 @@ class Loan(models.Model):
                 last_loan = Loan.objects.filter(
                     application_date__year=year,
                     loan_id__startswith=f'LN-{year}-'
-                ).order_by('-loan_id').first()
+                ).select_for_update().order_by('-loan_id').first()
 
                 if last_loan:
                     last_seq = int(last_loan.loan_id.split('-')[-1])

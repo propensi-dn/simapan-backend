@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 from members.models import Member, BankAccount
 from users.models import User
@@ -81,8 +81,21 @@ class Loan(models.Model):
     def save(self, *args, **kwargs):
         if not self.loan_id:
             year = timezone.now().year
-            seq = Loan.objects.filter(application_date__year=year).count() + 1
-            self.loan_id = f'LN-{year}-{seq:03d}'
+            
+            with transaction.atomic():
+                last_loan = Loan.objects.filter(
+                    application_date__year=year,
+                    loan_id__startswith=f'LN-{year}-'
+                ).order_by('-loan_id').first()
+
+                if last_loan:
+                    last_seq = int(last_loan.loan_id.split('-')[-1])
+                    seq = last_seq + 1
+                else:
+                    seq = 1
+                    
+                self.loan_id = f'LN-{year}-{seq:03d}'
+                
         super().save(*args, **kwargs)
 
     @property

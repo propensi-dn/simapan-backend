@@ -1,3 +1,4 @@
+from enum import member
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
@@ -5,19 +6,29 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from .serializers import MemberRegisterSerializer, MemberProfileSerializer, BankAccountSerializer
 from .models import Member, BankAccount
 
+
 class MemberRegisterView(APIView):
     permission_classes = [permissions.AllowAny]
-    parser_classes = [MultiPartParser, FormParser]  # untuk file upload
+    parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request):
         serializer = MemberRegisterSerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save()
+            member = serializer.save()
+
+            # Trigger notifikasi registrasi pending
+            try:
+                from notifications.service import notify_registration_pending
+                notify_registration_pending(member)
+            except Exception:
+                pass
+
             return Response(
                 {'message': 'Registrasi berhasil. Data sedang menunggu verifikasi.'},
                 status=status.HTTP_201_CREATED
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 class MemberStatusView(APIView):
     permission_classes = [permissions.AllowAny]
@@ -31,6 +42,7 @@ class MemberStatusView(APIView):
             return Response({'email': email, 'status': member.status})
         except Member.DoesNotExist:
             return Response({'error': 'Email tidak ditemukan'}, status=404)
+
 
 class MemberProfileView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -56,13 +68,13 @@ class MemberProfileView(APIView):
         mutable_data.pop('selfie_image', None)
 
         serializer = MemberProfileSerializer(member, data=mutable_data, partial=True, context={'request': request})
-        
+
         if serializer.is_valid():
             uploaded_picture = request.FILES.get('profile_picture') or request.FILES.get('selfie_image')
             if uploaded_picture:
                 member.selfie_image = uploaded_picture
                 member.save(update_fields=['selfie_image'])
-            
+
             serializer.save()
             member.refresh_from_db()
             response_serializer = MemberProfileSerializer(member, context={'request': request})

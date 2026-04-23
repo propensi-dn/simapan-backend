@@ -3,7 +3,7 @@ from django.utils import timezone
 from decimal import Decimal
 from members.models import Member, BankAccount
 from users.models import User
-
+from decimal import Decimal
 
 class LoanCategory(models.TextChoices):
     MODAL_USAHA     = 'MODAL_USAHA', 'Modal Usaha'

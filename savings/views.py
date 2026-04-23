@@ -71,6 +71,13 @@ class InitialDepositCreateView(BaseMemberSavingsView):
 		else:
 			saving = serializer.save()
 
+		# Trigger notifikasi setoran diterima
+		try:
+			from notifications.service import notify_saving_received
+			notify_saving_received(saving)
+		except Exception:
+			pass
+
 		return Response(
 			{
 				'message': 'Bukti simpanan pokok berhasil dikirim',
@@ -97,6 +104,13 @@ class SavingsDepositCreateView(BaseMemberSavingsView):
 		serializer = DepositCreateSerializer(data=request.data, context={'request': request})
 		serializer.is_valid(raise_exception=True)
 		saving = serializer.save()
+
+		# Trigger notifikasi setoran diterima
+		try:
+			from notifications.service import notify_saving_received
+			notify_saving_received(saving)
+		except Exception:
+			pass
 
 		return Response(
 			{
@@ -164,5 +178,3 @@ class SavingsOverviewView(BaseMemberSavingsView):
 		paginated['bank_account'] = bank_data
 
 		return Response(paginated)
-
-# Create your views here.

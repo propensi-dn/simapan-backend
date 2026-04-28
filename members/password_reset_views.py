@@ -22,11 +22,7 @@ def _get_signer():
 
 def _build_reset_url(token):
     """Generate full URL ke halaman reset password di frontend."""
-<<<<<<< HEAD
-    frontend_base = getattr(settings, 'FRONTEND_BASE_URL', 'http://localhost:3000')
-=======
     frontend_base = getattr(settings, 'FRONTEND_BASE_URL')
->>>>>>> main
     return f'{frontend_base.rstrip("/")}/reset-password?token={token}'
 
 

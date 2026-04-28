@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-from django.db import models
-=======
 from django.db import models, transaction
->>>>>>> main
 from django.utils import timezone
 from members.models import Member, BankAccount
 from users.models import User
@@ -85,10 +81,6 @@ class Loan(models.Model):
     def save(self, *args, **kwargs):
         if not self.loan_id:
             year = timezone.now().year
-<<<<<<< HEAD
-            seq = Loan.objects.filter(application_date__year=year).count() + 1
-            self.loan_id = f'LN-{year}-{seq:03d}'
-=======
             
             with transaction.atomic():
                 last_loan = Loan.objects.filter(
@@ -104,7 +96,6 @@ class Loan(models.Model):
                     
                 self.loan_id = f'LN-{year}-{seq:03d}'
                 
->>>>>>> main
         super().save(*args, **kwargs)
 
     @property
@@ -122,13 +113,8 @@ class Loan(models.Model):
     def outstanding_balance(self):
         paid = self.installments.filter(
             status=InstallmentStatus.PAID
-<<<<<<< HEAD
-        ).aggregate(total=models.Sum('principal_component'))['total'] or 0
-        return self.amount - paid
-=======
         ).aggregate(total=models.Sum('amount'))['total'] or Decimal('0')
         return self.total_repayment - paid
->>>>>>> main
 
     @property
     def next_due_date(self):

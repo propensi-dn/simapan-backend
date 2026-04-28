@@ -20,8 +20,6 @@ from .serializers import (
 )
 
 
-<<<<<<< HEAD
-=======
 def _manager_remaining_balance(loan):
     """Sisa pinjaman manager: pokok + bunga yang belum dibayar."""
     total_remaining = (
@@ -34,7 +32,6 @@ def _manager_remaining_balance(loan):
     return loan.outstanding_balance
 
 
->>>>>>> main
 class StandardPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = 'page_size'
@@ -129,16 +126,12 @@ class ManagerPendingLoansView(APIView):
         history_serializer = ManagerLoanHistorySerializer(history_queryset, many=True)
 
         # Tabel all loans (server-side search/filter/pagination)
-<<<<<<< HEAD
-        all_loans_queryset = Loan.objects.select_related('member').order_by('-application_date', '-id')
-=======
         all_loans_queryset = (
             Loan.objects
             .exclude(status=LoanStatus.PENDING)
             .select_related('member')
             .order_by('-application_date', '-id')
         )
->>>>>>> main
 
         if all_search:
             all_loans_queryset = all_loans_queryset.filter(
@@ -147,11 +140,7 @@ class ManagerPendingLoansView(APIView):
             )
 
         valid_statuses = {choice[0] for choice in LoanStatus.choices}
-<<<<<<< HEAD
-        if all_status in valid_statuses:
-=======
         if all_status in valid_statuses and all_status != LoanStatus.PENDING:
->>>>>>> main
             all_loans_queryset = all_loans_queryset.filter(status=all_status)
 
         all_paginator = AllLoansPagination()
@@ -223,11 +212,7 @@ class ManagerPendingLoansView(APIView):
                 'id': loan.id,
                 'member_name': loan.member.full_name,
                 'loan_id': loan.loan_id,
-<<<<<<< HEAD
-                'remaining_balance': loan.outstanding_balance,
-=======
                 'remaining_balance': _manager_remaining_balance(loan),
->>>>>>> main
                 'due_date': inst.due_date,
                 'status': loan.status,
                 'status_display': loan.get_status_display(),
@@ -335,8 +320,6 @@ class ManagerLoanDetailView(APIView):
             },
         ]
 
-<<<<<<< HEAD
-=======
         monitoring = None
         if loan.status in [LoanStatus.ACTIVE, LoanStatus.OVERDUE, LoanStatus.LUNAS, LoanStatus.LUNAS_AFTER_OVERDUE]:
             installments_qs = loan.installments.all().order_by('installment_number')
@@ -377,7 +360,6 @@ class ManagerLoanDetailView(APIView):
                 'installments': monitoring_installments,
             }
 
->>>>>>> main
         return Response({
             'loan': detail_serializer.data,
             'member_previous_loans': previous_loans_serializer.data,
@@ -403,10 +385,7 @@ class ManagerLoanDetailView(APIView):
                 ],
             },
             'risk_assessment': risk_assessment,
-<<<<<<< HEAD
-=======
             'monitoring': monitoring,
->>>>>>> main
         })
 
     def post(self, request, pk):

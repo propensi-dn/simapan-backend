@@ -76,11 +76,6 @@ def generate_installment_schedule(loan) -> list:
     Disbursed date = hari ini, cicilan pertama = 1 bulan setelah pencairan.
     """
     INTEREST_RATE = Decimal('0.005')
-<<<<<<< HEAD
-    principal_per_month = loan.amount / loan.tenor
-    interest_per_month = loan.amount * INTEREST_RATE
-    monthly_amount = principal_per_month + interest_per_month
-=======
     
     total_interest = loan.amount * INTEREST_RATE * loan.tenor
     total_repayment = loan.amount + total_interest
@@ -89,22 +84,10 @@ def generate_installment_schedule(loan) -> list:
     base_principal = int(loan.amount / loan.tenor)
     base_interest = int(total_interest / loan.tenor)
     base_monthly_amount = base_principal + base_interest
->>>>>>> main
 
     start_date = loan.disbursed_at.date() if loan.disbursed_at else timezone.now().date()
 
     schedule = []
-<<<<<<< HEAD
-    for i in range(1, loan.tenor + 1):
-        due_date = start_date + relativedelta(months=i)
-        schedule.append({
-            'installment_number': i,
-            'due_date': due_date,
-            'amount': round(monthly_amount, 2),
-            'principal_component': round(principal_per_month, 2),
-            'interest_component': round(interest_per_month, 2),
-        })
-=======
     
     # Track akumulasi untuk penyesuaian di bulan terakhir
     accumulated_principal = Decimal('0')
@@ -141,7 +124,6 @@ def generate_installment_schedule(loan) -> list:
             accumulated_principal += Decimal(base_principal)
             accumulated_interest += Decimal(base_interest)
             accumulated_total += Decimal(base_monthly_amount)
->>>>>>> main
 
     return schedule
 

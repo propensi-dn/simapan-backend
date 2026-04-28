@@ -1,4 +1,8 @@
 from datetime import datetime
+<<<<<<< HEAD
+=======
+from decimal import Decimal
+>>>>>>> main
 
 from django.db import transaction
 from django.db.models import Q
@@ -9,6 +13,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from members.permissions import IsStaffOrAbove
+<<<<<<< HEAD
+=======
+from savings.models import SavingsBalance
+>>>>>>> main
 
 from .models import Installment, InstallmentStatus, LoanStatus
 
@@ -273,11 +281,28 @@ class StaffInstallmentStatusUpdateView(APIView):
                 status=status.HTTP_200_OK,
             )
 
+<<<<<<< HEAD
         installment.status = InstallmentStatus.UNPAID
         installment.rejection_reason = rejection_reason
         installment.verified_by = request.user
         installment.submitted_at = None
         installment.save(update_fields=['status', 'rejection_reason', 'verified_by', 'submitted_at', 'updated_at'])
+=======
+        refund_amount = Decimal('0')
+        with transaction.atomic():
+            if installment.payment_method == 'SAVINGS':
+                balance = SavingsBalance.objects.select_for_update().filter(member=loan.member).first()
+                if balance:
+                    refund_amount = Decimal(str(installment.amount))
+                    balance.total_sukarela = Decimal(str(balance.total_sukarela or 0)) + refund_amount
+                    balance.save(update_fields=['total_sukarela', 'last_updated'])
+
+            installment.status = InstallmentStatus.UNPAID
+            installment.rejection_reason = rejection_reason
+            installment.verified_by = request.user
+            installment.submitted_at = None
+            installment.save(update_fields=['status', 'rejection_reason', 'verified_by', 'submitted_at', 'updated_at'])
+>>>>>>> main
 
         return Response(
             {
@@ -300,6 +325,10 @@ class StaffInstallmentStatusUpdateView(APIView):
                         if installment.transfer_proof else None
                     ),
                 },
+<<<<<<< HEAD
+=======
+                'refunded_sukarela': str(refund_amount),
+>>>>>>> main
             },
             status=status.HTTP_200_OK,
         )

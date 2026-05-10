@@ -18,6 +18,7 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from members.views import MemberDashboardView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -34,5 +35,6 @@ urlpatterns = [
     path('api/loans/', include('loans.urls')),
     path('api/installments/', include('loans.pay_urls')),
     path('api/auth/password/', include('members.password_reset_urls')),
+    path('api/dashboards/member/', MemberDashboardView.as_view()),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     

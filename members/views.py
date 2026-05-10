@@ -85,6 +85,15 @@ class MemberProfileView(APIView):
 class MemberBankAccountView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    def get(self, request):
+        try:
+            member = request.user.member
+        except Member.DoesNotExist:
+            return Response({'error': 'Profil tidak ditemukan'}, status=status.HTTP_404_NOT_FOUND)
+
+        accounts = BankAccount.objects.filter(member=member).order_by('-is_primary', 'created_at')
+        return Response(BankAccountSerializer(accounts, many=True).data)
+
     def post(self, request):
         try:
             member = request.user.member

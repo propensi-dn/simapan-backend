@@ -1,6 +1,7 @@
 from django.contrib import admin
 
-from savings.models import SavingTransaction, SavingsWithdrawal
+from savings.models import SavingTransaction, SavingsWithdrawal, SavingStatus
+from notifications.service import notify_saving_verified, notify_saving_rejected
 
 
 @admin.register(SavingTransaction)
@@ -9,9 +10,24 @@ class SavingTransactionAdmin(admin.ModelAdmin):
 	list_filter = ('saving_type', 'status')
 	search_fields = ('transaction_id', 'saving_id', 'member__user__email', 'member__full_name')
 
-
 @admin.register(SavingsWithdrawal)
 class SavingsWithdrawalAdmin(admin.ModelAdmin):
 	list_display = ('withdrawal_id', 'member', 'amount', 'bank_name', 'account_number', 'status', 'created_at')
 	list_filter = ('status',)
 	search_fields = ('withdrawal_id', 'member__user__email', 'member__full_name', 'account_number')
+	def save_model(self, request, obj, form, change):
+		if change and 'status' in form.changed_data:
+			original = SavingTransaction.objects.get(pk=obj.pk)
+			if original.status == SavingStatus.PENDING:
+				if obj.status == SavingStatus.SUCCESS:
+					SavingTransaction.approve_transaction(original, request.user)
+					notify_saving_verified(original)
+					return
+				elif obj.status == SavingStatus.REJECTED:
+					super().save_model(request, obj, form, change)
+					notify_saving_rejected(obj)
+					return
+		super().save_model(request, obj, form, change)
+
+# Register your models here.
+>>>>>>> savings/admin.py

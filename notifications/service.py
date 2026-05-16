@@ -762,7 +762,7 @@ def notify_withdrawal_received(withdrawal):
         member_redirect_url='/dashboard/member/withdrawals',
         staff_title='Permintaan Penarikan Baru',
         staff_message=staff_msg,
-        staff_redirect_url='/dashboard/staff/withdrawals/pending',
+        staff_redirect_url='/dashboard/staff/withdrawals',
         broadcast_to='STAFF',
         email_subject_member='Permintaan Penarikan Anda Telah Diterima',
         email_body_member=email_member,

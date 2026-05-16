@@ -724,79 +724,6 @@ def notify_loan_overdue(loan):
     )
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# WITHDRAWALS
-# ═══════════════════════════════════════════════════════════════════════════
-
-def notify_withdrawal_received(withdrawal):
-    """Member ajuin penarikan → member + staff dapet notif."""
-    member_msg = (
-        'Permintaan penarikan simpanan Anda telah diterima '
-        'dan sedang diproses oleh petugas.'
-    )
-    staff_msg = (
-        f'Permintaan penarikan dari {withdrawal.member.full_name} '
-        f'menunggu proses.'
-    )
-
-    email_member = (
-        f'Yth. {withdrawal.member.full_name},\n\n'
-        'Permintaan penarikan simpanan Anda telah kami terima '
-        'dan sedang dalam proses oleh petugas.\n\n'
-        'Anda akan menerima notifikasi setelah dana ditransfer.\n\n'
-        'Salam,\nTim SI-MAPAN'
-    )
-    email_staff = (
-        f'Ada permintaan penarikan simpanan yang menunggu proses:\n\n'
-        f'Anggota : {withdrawal.member.full_name}\n\n'
-        'Silakan login ke dashboard untuk memprosesnya.\n\n'
-        'Salam,\nSistem SI-MAPAN'
-    )
-
-    _broadcast(
-        member_user=withdrawal.member.user,
-        member_email=withdrawal.member.user.email,
-        notif_type='WITHDRAWAL',
-        member_title='Permintaan Penarikan Diterima',
-        member_message=member_msg,
-        member_redirect_url='/dashboard/member/withdrawals',
-        staff_title='Permintaan Penarikan Baru',
-        staff_message=staff_msg,
-        staff_redirect_url='/dashboard/staff/withdrawals/pending',
-        broadcast_to='STAFF',
-        email_subject_member='Permintaan Penarikan Anda Telah Diterima',
-        email_body_member=email_member,
-        email_subject_staff='Permintaan Penarikan Menunggu Proses',
-        email_body_staff=email_staff,
-    )
-
-
-def notify_withdrawal_processed(withdrawal):
-    """Staff proses penarikan → member dapet notif + email."""
-    member_msg = (
-        'Permintaan penarikan simpanan Anda telah diproses. '
-        'Dana akan ditransfer ke rekening bank terdaftar.'
-    )
-    email_member = (
-        f'Yth. {withdrawal.member.full_name},\n\n'
-        'Permintaan penarikan simpanan Anda telah diproses oleh petugas.\n'
-        'Dana akan ditransfer ke rekening bank terdaftar Anda.\n\n'
-        'Salam,\nTim SI-MAPAN'
-    )
-
-    _broadcast(
-        member_user=withdrawal.member.user,
-        member_email=withdrawal.member.user.email,
-        notif_type='WITHDRAWAL',
-        member_title='Penarikan Diproses',
-        member_message=member_msg,
-        member_redirect_url='/dashboard/member/withdrawals',
-        staff_title='', staff_message='', staff_redirect_url='',
-        broadcast_to=None,
-        email_subject_member='Penarikan Anda Telah Diproses',
-        email_body_member=email_member,
-    )
-
 
 # ═══════════════════════════════════════════════════════════════════════════
 # RESIGNATION
@@ -869,5 +796,36 @@ def notify_resignation_approved(resignation):
         staff_title='', staff_message='', staff_redirect_url='',
         broadcast_to=None,
         email_subject_member='Pengunduran Diri Anda Telah Disetujui',
+        email_body_member=email_member,
+    )
+
+
+def notify_resignation_rejected(resignation, reason=''):
+    """Manager reject pengunduran diri → member dapet notif + email."""
+    member_msg = 'Permintaan pengunduran diri Anda ditolak.'
+    if reason:
+        member_msg += f' Alasan: {reason}'
+
+    email_member = (
+        f'Yth. {resignation.member.full_name},\n\n'
+        'Mohon maaf, permintaan pengunduran diri Anda tidak dapat disetujui.\n'
+    )
+    if reason:
+        email_member += f'Alasan: {reason}\n'
+    email_member += (
+        '\nApabila ada pertanyaan, silakan hubungi petugas kami.\n\n'
+        'Salam,\nTim SI-MAPAN'
+    )
+
+    _broadcast(
+        member_user=resignation.member.user,
+        member_email=resignation.member.user.email,
+        notif_type='RESIGNATION',
+        member_title='Pengunduran Diri Ditolak',
+        member_message=member_msg,
+        member_redirect_url='/dashboard/member',
+        staff_title='', staff_message='', staff_redirect_url='',
+        broadcast_to=None,
+        email_subject_member='Permintaan Pengunduran Diri Anda Ditolak',
         email_body_member=email_member,
     )

@@ -513,3 +513,156 @@ class ManagerLoanStatusUpdateView(APIView):
             'loan_id': loan.loan_id,
             'status': loan.status,
         })
+
+class ManagerDashboardView(APIView):
+    """
+    GET /api/manager/loans/dashboard/
+
+    Dashboard executive overview untuk manager, mengembalikan:
+    - Total liquidity (total simpanan semua member)
+    - Total outstanding loans (total pinjaman aktif)
+    - Estimated SHU (estimasi hasil usaha)
+    - Pending loan approvals count
+    - Portfolio performance trend data (6 bulan dan 1 tahun)
+    - Recent credit activities
+    """
+    permission_classes = [IsManagerOrAbove]
+
+    def get(self, request):
+        # Use shared finance utilities to compute snapshot metrics
+        try:
+            from .utils import get_snapshot_financials
+            snapshot = get_snapshot_financials()
+        except Exception:
+            snapshot = {}
+
+        Notification = None
+        try:
+            from notifications.models import Notification
+        except (ImportError, Exception):
+            pass
+
+        response_data = {
+            'total_liquidity': snapshot.get('total_liquidity', 0),
+            'total_outstanding_loans': snapshot.get('total_outstanding_loans', 0),
+            'interest_income_total': snapshot.get('interest_income_total', 0),
+            'estimated_shu': snapshot.get('estimated_shu', 0),
+            'npl_count': snapshot.get('npl_count', 0),
+            'npl_amount': snapshot.get('npl_amount', 0),
+            'pending_loans_count': 0,
+            'portfolio_trend_6m': [],
+            'portfolio_trend_1y': [],
+            'recent_activities': [],
+        }
+
+        # 4. Pending loan approvals (count + preview list)
+        try:
+            pending_qs = Loan.objects.filter(status=LoanStatus.PENDING).order_by('application_date')[:10]
+            pending_loans_count = Loan.objects.filter(status=LoanStatus.PENDING).count()
+            pending_list = []
+            for l in pending_qs:
+                pending_list.append({
+                    'loan_id': l.loan_id,
+                    'member_name': getattr(l.member, 'full_name', None),
+                    'amount': float(l.amount or 0),
+                    'application_date': l.application_date.isoformat() if l.application_date else None,
+                    'status': l.status,
+                })
+
+            response_data['pending_loans_count'] = pending_loans_count
+            response_data['pending_loans'] = pending_list
+        except Exception:
+            pass
+
+        # 5. Portfolio Performance Trend - 6 months
+        try:
+            today = timezone.now().date()
+            six_months_ago = today - timedelta(days=180)
+            
+            trend_6m_qs = (
+                Loan.objects
+                .filter(application_date__gte=six_months_ago)
+                .filter(status__in=[LoanStatus.APPROVED, LoanStatus.ACTIVE, LoanStatus.LUNAS])
+                .annotate(month=TruncMonth('application_date'))
+                .values('month')
+                .annotate(count=Count('id'), total=Sum('amount'))
+                .order_by('month')
+            )
+            
+            trend_6m_data = []
+            month_names = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
+            for item in trend_6m_qs:
+                if item['month']:
+                    month_idx = item['month'].month - 1
+                    trend_6m_data.append({
+                        'month': month_names[month_idx],
+                        'date': item['month'].isoformat(),
+                        'value': float(item['total'] or 0) / 1_000_000,
+                        'count': item['count']
+                    })
+            response_data['portfolio_trend_6m'] = trend_6m_data
+        except Exception:
+            pass
+
+        # 6. Portfolio Performance Trend - 1 year
+        try:
+            today = timezone.now().date()
+            one_year_ago = today - timedelta(days=365)
+            
+            trend_1y_qs = (
+                Loan.objects
+                .filter(application_date__gte=one_year_ago)
+                .filter(status__in=[LoanStatus.APPROVED, LoanStatus.ACTIVE, LoanStatus.LUNAS])
+                .annotate(month=TruncMonth('application_date'))
+                .values('month')
+                .annotate(count=Count('id'), total=Sum('amount'))
+                .order_by('month')
+            )
+            
+            trend_1y_data = []
+            month_names = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
+            for item in trend_1y_qs:
+                if item['month']:
+                    month_idx = item['month'].month - 1
+                    trend_1y_data.append({
+                        'month': month_names[month_idx],
+                        'date': item['month'].isoformat(),
+                        'value': float(item['total'] or 0) / 1_000_000,
+                        'count': item['count']
+                    })
+            response_data['portfolio_trend_1y'] = trend_1y_data
+        except Exception:
+            pass
+
+        # 7. Recent credit activities
+        if Notification:
+            try:
+                seven_days_ago = timezone.now() - timedelta(days=7)
+                
+                recent_notifications = Notification.objects.filter(
+                    created_at__gte=seven_days_ago,
+                    type__in=['LOAN', 'SAVING', 'WITHDRAWAL']
+                ).select_related('recipient').order_by('-created_at')[:20]
+
+                recent_activities = []
+                for notif in recent_notifications:
+                    icon = '+'
+                    if 'Disbursed' in notif.title or 'disbursed' in notif.message:
+                        icon = '+'
+                    elif 'Payment' in notif.title or 'payment' in notif.message or 'Pembayaran' in notif.title:
+                        icon = '-'
+                    elif 'Resign' in notif.title or 'resign' in notif.message:
+                        icon = 'x'
+                    
+                    recent_activities.append({
+                        'icon': icon,
+                        'title': notif.title,
+                        'detail': notif.message[:100],
+                        'time': notif.created_at.isoformat(),
+                        'type': notif.type,
+                    })
+                response_data['recent_activities'] = recent_activities
+            except Exception:
+                pass
+
+        return Response(response_data)

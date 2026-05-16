@@ -27,6 +27,7 @@ urlpatterns = [
     path('api/staff/loans/', include('loans.staff_urls')),
     path('api/staff/installments/', include('loans.staff_installment_urls')),
     path('api/manager/loans/', include('loans.manager_urls')),
+    path('api/chairman/', include('loans.chairman_urls')),
     path('api/savings/', include('savings.urls')),
     path('api/notifications/', include('notifications.urls')),
     path('api/verifications/', include('verifications.urls')),

@@ -30,4 +30,3 @@ class SavingsWithdrawalAdmin(admin.ModelAdmin):
 		super().save_model(request, obj, form, change)
 
 # Register your models here.
->>>>>>> savings/admin.py

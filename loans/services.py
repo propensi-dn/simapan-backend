@@ -76,22 +76,54 @@ def generate_installment_schedule(loan) -> list:
     Disbursed date = hari ini, cicilan pertama = 1 bulan setelah pencairan.
     """
     INTEREST_RATE = Decimal('0.005')
-    principal_per_month = loan.amount / loan.tenor
-    interest_per_month = loan.amount * INTEREST_RATE
-    monthly_amount = principal_per_month + interest_per_month
+    
+    total_interest = loan.amount * INTEREST_RATE * loan.tenor
+    total_repayment = loan.amount + total_interest
+
+    # 1. Hitung base cicilan bulanan dibulatkan ke int (tanpa koma)
+    base_principal = int(loan.amount / loan.tenor)
+    base_interest = int(total_interest / loan.tenor)
+    base_monthly_amount = base_principal + base_interest
 
     start_date = loan.disbursed_at.date() if loan.disbursed_at else timezone.now().date()
 
     schedule = []
+    
+    # Track akumulasi untuk penyesuaian di bulan terakhir
+    accumulated_principal = Decimal('0')
+    accumulated_interest = Decimal('0')
+    accumulated_total = Decimal('0')
+
     for i in range(1, loan.tenor + 1):
         due_date = start_date + relativedelta(months=i)
-        schedule.append({
-            'installment_number': i,
-            'due_date': due_date,
-            'amount': round(monthly_amount, 2),
-            'principal_component': round(principal_per_month, 2),
-            'interest_component': round(interest_per_month, 2),
-        })
+        
+        if i == loan.tenor:
+            # 2. BULAN TERAKHIR: Sisa dari total tagihan dikurangi akumulasi
+            final_principal = loan.amount - accumulated_principal
+            final_interest = total_interest - accumulated_interest
+            final_monthly_amount = total_repayment - accumulated_total
+            
+            schedule.append({
+                'installment_number': i,
+                'due_date': due_date,
+                'amount': final_monthly_amount,
+                'principal_component': final_principal,
+                'interest_component': final_interest,
+            })
+        else:
+            # BULAN 1 s/d N-1: Pakai base bulat
+            schedule.append({
+                'installment_number': i,
+                'due_date': due_date,
+                'amount': Decimal(base_monthly_amount),
+                'principal_component': Decimal(base_principal),
+                'interest_component': Decimal(base_interest),
+            })
+            
+            # Tambahkan ke akumulasi
+            accumulated_principal += Decimal(base_principal)
+            accumulated_interest += Decimal(base_interest)
+            accumulated_total += Decimal(base_monthly_amount)
 
     return schedule
 

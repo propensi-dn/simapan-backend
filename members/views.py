@@ -49,12 +49,31 @@ class MemberProfileView(APIView):
     parser_classes = [MultiPartParser, FormParser]
 
     def get(self, request):
+        user = request.user
+        # Non-MEMBER roles (STAFF, MANAGER, CHAIRMAN) don't have a linked Member object.
+        # Return their basic user info so dashboard pages don't 404.
+        if not hasattr(user, 'member') or user.role != 'MEMBER':
+            return Response({
+                'id': user.id,
+                'email': user.email,
+                'role': user.role,
+                'full_name': getattr(user, 'full_name', user.email.split('@')[0]),
+                'member_id': None,
+                'is_member': False,
+            })
         try:
-            member = request.user.member
+            member = user.member
             serializer = MemberProfileSerializer(member, context={'request': request})
-            return Response(serializer.data)
+            return Response({**serializer.data, 'is_member': True})
         except Member.DoesNotExist:
-            return Response({'error': 'Profil tidak ditemukan'}, status=404)
+            return Response({
+                'id': user.id,
+                'email': user.email,
+                'role': user.role,
+                'full_name': getattr(user, 'full_name', user.email.split('@')[0]),
+                'member_id': None,
+                'is_member': False,
+            })
 
     def patch(self, request):
         """Update informasi profil (telepon, alamat, atau foto)"""
@@ -84,6 +103,15 @@ class MemberProfileView(APIView):
 
 class MemberBankAccountView(APIView):
     permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        try:
+            member = request.user.member
+        except Member.DoesNotExist:
+            return Response({'error': 'Profil tidak ditemukan'}, status=status.HTTP_404_NOT_FOUND)
+
+        accounts = BankAccount.objects.filter(member=member).order_by('-is_primary', 'created_at')
+        return Response(BankAccountSerializer(accounts, many=True).data)
 
     def post(self, request):
         try:

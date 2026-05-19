@@ -1,8 +1,9 @@
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
+from decimal import Decimal
 from members.models import Member, BankAccount
 from users.models import User
-
+from decimal import Decimal
 
 class LoanCategory(models.TextChoices):
     MODAL_USAHA     = 'MODAL_USAHA', 'Modal Usaha'
@@ -41,7 +42,7 @@ class BadDebtStatus(models.TextChoices):
 
 class Loan(models.Model):
     TENOR_CHOICES = [(6, '6 Bulan'), (12, '12 Bulan'), (24, '24 Bulan'), (36, '36 Bulan')]
-    INTEREST_RATE = 0.005  # 0.5% flat per bulan
+    INTEREST_RATE = Decimal('0.005')  # 0.5% flat per bulan
 
     member              = models.ForeignKey(Member, on_delete=models.CASCADE, related_name='loans')
     loan_id             = models.CharField(max_length=30, unique=True, blank=True)
@@ -81,8 +82,21 @@ class Loan(models.Model):
     def save(self, *args, **kwargs):
         if not self.loan_id:
             year = timezone.now().year
-            seq = Loan.objects.filter(application_date__year=year).count() + 1
-            self.loan_id = f'LN-{year}-{seq:03d}'
+            
+            with transaction.atomic():
+                last_loan = Loan.objects.filter(
+                    application_date__year=year,
+                    loan_id__startswith=f'LN-{year}-'
+                ).select_for_update().order_by('-loan_id').first()
+
+                if last_loan:
+                    last_seq = int(last_loan.loan_id.split('-')[-1])
+                    seq = last_seq + 1
+                else:
+                    seq = 1
+                    
+                self.loan_id = f'LN-{year}-{seq:03d}'
+                
         super().save(*args, **kwargs)
 
     @property
@@ -100,8 +114,8 @@ class Loan(models.Model):
     def outstanding_balance(self):
         paid = self.installments.filter(
             status=InstallmentStatus.PAID
-        ).aggregate(total=models.Sum('principal_component'))['total'] or 0
-        return self.amount - paid
+        ).aggregate(total=models.Sum('amount'))['total'] or Decimal('0')
+        return self.total_repayment - paid
 
     @property
     def next_due_date(self):

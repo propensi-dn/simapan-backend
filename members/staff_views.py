@@ -10,7 +10,7 @@ from rest_framework.pagination import PageNumberPagination
 
 from .models import Member
 from .permissions import IsStaffOrAbove
-from .staff_serializers import (
+from .serializers import (
     PendingMemberListSerializer,
     MemberDetailSerializer,
     MemberVerifySerializer,
@@ -35,13 +35,6 @@ class StandardPagination(PageNumberPagination):
 
 
 class PendingMembersListView(APIView):
-    """
-    GET /api/staff/members/pending/
-
-    Mengembalikan daftar semua calon anggota berstatus PENDING.
-    Mendukung search berdasarkan nama, email, atau NIK melalui query param ?search=
-    serta pagination dengan ?page= dan ?page_size=.
-    """
     permission_classes = [IsStaffOrAbove]
 
     def get(self, request):
@@ -67,17 +60,6 @@ class PendingMembersListView(APIView):
 
 
 class MemberVerifyView(APIView):
-    """
-    GET  /api/staff/members/{id}/verify/  — detail lengkap calon anggota.
-    POST /api/staff/members/{id}/verify/  — approve atau reject calon anggota.
-
-    Body POST:
-        { "action": "approve" }
-        { "action": "reject", "rejection_reason": "<alasan>" }
-
-    Hanya anggota berstatus PENDING yang dapat diverifikasi.
-    Setelah verifikasi, email notifikasi dikirim ke calon anggota.
-    """
     permission_classes = [IsStaffOrAbove]
 
     def _get_member(self, pk):
@@ -133,7 +115,18 @@ class MemberVerifyView(APIView):
         member.verified_at = timezone.now()
         member.save(update_fields=['status', 'rejection_reason', 'verified_by', 'verified_at'])
 
+        # Kirim email notifikasi
         self._send_status_email(member, action)
+
+        # Trigger in-app notification
+        try:
+            from notifications.service import notify_registration_verified, notify_registration_rejected
+            if action == 'approve':
+                notify_registration_verified(member)
+            else:
+                notify_registration_rejected(member, member.rejection_reason or '')
+        except Exception:
+            pass
 
         updated_serializer = MemberDetailSerializer(member, context={'request': request})
         return Response(
@@ -183,5 +176,4 @@ class MemberVerifyView(APIView):
                 fail_silently=True,
             )
         except Exception:
-            # Kegagalan pengiriman email tidak boleh mengganggu proses verifikasi
             pass

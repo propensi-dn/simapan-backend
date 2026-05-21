@@ -642,7 +642,7 @@ class ManagerDashboardView(APIView):
                 recent_notifications = Notification.objects.filter(
                     created_at__gte=seven_days_ago,
                     type__in=['LOAN', 'SAVING', 'WITHDRAWAL']
-                ).select_related('recipient').order_by('-created_at')[:20]
+                ).select_related('recipient').order_by('-created_at')[:10]
 
                 recent_activities = []
                 for notif in recent_notifications:

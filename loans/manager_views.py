@@ -549,13 +549,6 @@ class ManagerDashboardView(APIView):
         except (ImportError, Exception):
             pass
 
-        overdue_queryset = None
-        try:
-            from .manager_overdue_views import _overdue_loan_queryset
-            overdue_queryset = _overdue_loan_queryset
-        except (ImportError, Exception):
-            pass
-
         response_data = {
             'total_liquidity': snapshot.get('total_liquidity', 0),
             'total_outstanding_loans': snapshot.get('total_outstanding_loans', 0),
@@ -571,7 +564,12 @@ class ManagerDashboardView(APIView):
 
         # 4. Pending loan approvals (count + preview list)
         try:
-            pending_qs = Loan.objects.filter(status=LoanStatus.PENDING).order_by('application_date')[:10]
+            pending_qs = (
+                Loan.objects
+                .filter(status=LoanStatus.PENDING)
+                .select_related('member')
+                .order_by('application_date')[:10]
+            )
             pending_loans_count = Loan.objects.filter(status=LoanStatus.PENDING).count()
             total_approved = Loan.objects.filter(status=LoanStatus.APPROVED).count()
             total_overdue = Loan.objects.filter(status=LoanStatus.OVERDUE).count()
@@ -687,37 +685,29 @@ class ManagerDashboardView(APIView):
             pass
 
         # 6b. Overdue loan summary (for monitoring)
-        if overdue_queryset:
-            try:
-                today = timezone.now().date()
-                all_overdue = list(overdue_queryset())
-                total_overdue = len(all_overdue)
-                total_amount_overdue = sum(
-                    (
-                        loan.installments.filter(
-                            status__in=[InstallmentStatus.UNPAID, InstallmentStatus.PENDING],
-                            due_date__lt=today,
-                        ).aggregate(total=Sum('amount'))['total'] or 0
-                    )
-                    for loan in all_overdue
-                )
+        try:
+            today = timezone.now().date()
+            overdue_installments = Installment.objects.filter(
+                status__in=[InstallmentStatus.UNPAID, InstallmentStatus.PENDING],
+                due_date__lt=today,
+                loan__status__in=[LoanStatus.ACTIVE, LoanStatus.OVERDUE],
+            )
+            total_overdue = overdue_installments.values('loan_id').distinct().count()
+            total_amount_overdue = overdue_installments.aggregate(total=Sum('amount'))['total'] or 0
+            critical_cutoff = today - timedelta(days=90)
+            total_critical = Loan.objects.filter(
+                status__in=[LoanStatus.ACTIVE, LoanStatus.OVERDUE],
+                installments__status__in=[InstallmentStatus.UNPAID, InstallmentStatus.PENDING],
+                installments__due_date__lt=critical_cutoff,
+            ).distinct().count()
 
-                total_critical = 0
-                for loan in all_overdue:
-                    earliest = loan.installments.filter(
-                        status__in=[InstallmentStatus.UNPAID, InstallmentStatus.PENDING],
-                        due_date__lt=today,
-                    ).order_by('due_date').first()
-                    if earliest and (today - earliest.due_date).days >= 90:
-                        total_critical += 1
-
-                response_data['overdue_summary'] = {
-                    'total_overdue': total_overdue,
-                    'total_amount_overdue': float(total_amount_overdue),
-                    'total_critical': total_critical,
-                }
-            except Exception:
-                pass
+            response_data['overdue_summary'] = {
+                'total_overdue': total_overdue,
+                'total_amount_overdue': float(total_amount_overdue),
+                'total_critical': total_critical,
+            }
+        except Exception:
+            pass
 
         # 7. Recent credit activities
         if Notification:

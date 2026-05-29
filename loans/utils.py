@@ -60,27 +60,16 @@ def get_snapshot_financials():
         interest_income = safe_decimal(paid_interest)
 
         # NPL: align with overdue monitoring (ACTIVE/OVERDUE loans only)
-        try:
-            from .manager_overdue_views import _overdue_loan_queryset
-            overdue_loans = list(_overdue_loan_queryset())
-        except Exception:
-            today = timezone.now().date()
-            overdue_loans = list(
-                Loan.objects.filter(
-                    installments__status__in=[InstallmentStatus.UNPAID, InstallmentStatus.PENDING],
-                    installments__due_date__lt=today,
-                    status__in=[LoanStatus.ACTIVE, LoanStatus.OVERDUE],
-                ).distinct()
-            )
-
-        npl_count = len(overdue_loans)
         today = timezone.now().date()
-        for loan in overdue_loans:
-            amount_overdue = loan.installments.filter(
-                status__in=[InstallmentStatus.UNPAID, InstallmentStatus.PENDING],
-                due_date__lt=today,
-            ).aggregate(total=Sum('amount'))['total'] or 0
-            npl_amount += safe_decimal(amount_overdue)
+        overdue_installments = Installment.objects.filter(
+            status__in=[InstallmentStatus.UNPAID, InstallmentStatus.PENDING],
+            due_date__lt=today,
+            loan__status__in=[LoanStatus.ACTIVE, LoanStatus.OVERDUE],
+        )
+        npl_count = overdue_installments.values('loan_id').distinct().count()
+        npl_amount = safe_decimal(
+            overdue_installments.aggregate(total=Sum('amount'))['total'] or 0
+        )
 
     except Exception:
         pass

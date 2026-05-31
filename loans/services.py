@@ -47,6 +47,40 @@ def has_bad_debt(member) -> bool:
     return BadDebt.objects.filter(loan__member=member).exists()
 
 
+def calculate_max_loan_from_savings(member, tenor: int = 12) -> Decimal:
+    """
+    Hitung batas maksimal pinjaman berdasarkan:
+    1. Stable savings (pokok + wajib saja, sukarela bisa ditarik bebas)
+    2. Dikurangi kewajiban cicilan aktif yang sedang berjalan
+    3. Max cicilan baru ≤ 20% × stable_savings (MONTHLY_CAPACITY_RATIO)
+    Back-calculate dari flat-rate: max_loan = net_monthly × tenor / (1 + 0.005 × tenor)
+    """
+    ABSOLUTE_CAP = Decimal('50000000')
+    MONTHLY_CAPACITY_RATIO = Decimal('0.20')
+    INTEREST_RATE = Decimal('0.005')
+
+    balance = getattr(member, 'savings_balance', None)
+    stable_savings = (balance.total_pokok + balance.total_wajib) if balance else Decimal('0')
+
+    max_monthly = stable_savings * MONTHLY_CAPACITY_RATIO
+
+    from loans.models import LoanStatus
+    active_loans = member.loans.filter(status__in=[LoanStatus.ACTIVE, LoanStatus.OVERDUE])
+    current_obligations = sum(
+        (loan.monthly_installment for loan in active_loans),
+        Decimal('0')
+    )
+
+    net_monthly = max_monthly - current_obligations
+    if net_monthly <= 0:
+        return Decimal('0')
+
+    tenor_d = Decimal(str(tenor))
+    max_loan = net_monthly * tenor_d / (1 + INTEREST_RATE * tenor_d)
+
+    return min(max_loan, ABSOLUTE_CAP)
+
+
 def simulate_installment(amount: Decimal, tenor: int) -> dict:
     """
     Simulasi cicilan flat rate 0.5% per bulan

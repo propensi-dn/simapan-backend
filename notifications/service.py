@@ -724,6 +724,79 @@ def notify_loan_overdue(loan):
     )
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# WITHDRAWALS
+# ═══════════════════════════════════════════════════════════════════════════
+
+def notify_withdrawal_received(withdrawal):
+    """Member ajuin penarikan → member + staff dapet notif."""
+    member_msg = (
+        'Permintaan penarikan simpanan Anda telah diterima '
+        'dan sedang diproses oleh petugas.'
+    )
+    staff_msg = (
+        f'Permintaan penarikan dari {withdrawal.member.full_name} '
+        f'menunggu proses.'
+    )
+
+    email_member = (
+        f'Yth. {withdrawal.member.full_name},\n\n'
+        'Permintaan penarikan simpanan Anda telah kami terima '
+        'dan sedang dalam proses oleh petugas.\n\n'
+        'Anda akan menerima notifikasi setelah dana ditransfer.\n\n'
+        'Salam,\nTim SI-MAPAN'
+    )
+    email_staff = (
+        f'Ada permintaan penarikan simpanan yang menunggu proses:\n\n'
+        f'Anggota : {withdrawal.member.full_name}\n\n'
+        'Silakan login ke dashboard untuk memprosesnya.\n\n'
+        'Salam,\nSistem SI-MAPAN'
+    )
+
+    _broadcast(
+        member_user=withdrawal.member.user,
+        member_email=withdrawal.member.user.email,
+        notif_type='WITHDRAWAL',
+        member_title='Permintaan Penarikan Diterima',
+        member_message=member_msg,
+        member_redirect_url='/dashboard/member/withdrawals',
+        staff_title='Permintaan Penarikan Baru',
+        staff_message=staff_msg,
+        staff_redirect_url='/dashboard/staff/withdrawals',
+        broadcast_to='STAFF',
+        email_subject_member='Permintaan Penarikan Anda Telah Diterima',
+        email_body_member=email_member,
+        email_subject_staff='Permintaan Penarikan Menunggu Proses',
+        email_body_staff=email_staff,
+    )
+
+
+def notify_withdrawal_processed(withdrawal):
+    """Staff proses penarikan → member dapet notif + email."""
+    member_msg = (
+        'Permintaan penarikan simpanan Anda telah diproses. '
+        'Dana akan ditransfer ke rekening bank terdaftar.'
+    )
+    email_member = (
+        f'Yth. {withdrawal.member.full_name},\n\n'
+        'Permintaan penarikan simpanan Anda telah diproses oleh petugas.\n'
+        'Dana akan ditransfer ke rekening bank terdaftar Anda.\n\n'
+        'Salam,\nTim SI-MAPAN'
+    )
+
+    _broadcast(
+        member_user=withdrawal.member.user,
+        member_email=withdrawal.member.user.email,
+        notif_type='WITHDRAWAL',
+        member_title='Penarikan Diproses',
+        member_message=member_msg,
+        member_redirect_url='/dashboard/member/withdrawals',
+        staff_title='', staff_message='', staff_redirect_url='',
+        broadcast_to=None,
+        email_subject_member='Penarikan Anda Telah Diproses',
+        email_body_member=email_member,
+    )
+
 
 # ═══════════════════════════════════════════════════════════════════════════
 # RESIGNATION
@@ -828,4 +901,81 @@ def notify_resignation_rejected(resignation, reason=''):
         broadcast_to=None,
         email_subject_member='Permintaan Pengunduran Diri Anda Ditolak',
         email_body_member=email_member,
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# REFUNDS
+# ═══════════════════════════════════════════════════════════════════════════
+
+def notify_refund_completed(refund):
+    """
+    Staff cairkan dana pengembalian → member dapet notif + email.
+    Refund dapat berasal dari: (a) Pembayaran cicilan ditolak, (b) Pengunduran diri disetujui.
+    """
+    from refunds.models import RefundSourceType
+
+    member = refund.member
+    source_label = refund.get_source_type_display()
+    
+    if refund.source_type == RefundSourceType.INSTALLMENT and refund.installment:
+        loan_id = refund.installment.loan.loan_id
+        member_msg = (
+            f'Dana pengembalian untuk pinjaman {loan_id} (pembayaran cicilan ditolak) '
+            f'senilai Rp {refund.amount:,.0f} telah dicairkan ke rekening bank Anda.'
+        )
+        email_member = (
+            f'Yth. {member.full_name},\n\n'
+            f'Dana pengembalian untuk pinjaman {loan_id} '
+            '(pembayaran cicilan yang ditolak) '
+            f'senilai Rp {refund.amount:,.0f} telah dicairkan ke rekening bank Anda.\n\n'
+            'Silakan cek saldo rekening Anda dalam waktu 1-2 hari kerja.\n\n'
+            'Salam,\nTim SI-MAPAN'
+        )
+        member_title = 'Pengembalian Dana Pinjaman Dicairkan'
+    else:  # RESIGNATION
+        member_msg = (
+            f'Dana pengembalian simpanan dari pengunduran diri Anda '
+            f'senilai Rp {refund.amount:,.0f} telah dicairkan ke rekening bank Anda.'
+        )
+        email_member = (
+            f'Yth. {member.full_name},\n\n'
+            f'Dana pengembalian simpanan dari pengunduran diri Anda '
+            f'senilai Rp {refund.amount:,.0f} telah dicairkan ke rekening bank Anda.\n\n'
+            'Silakan cek saldo rekening Anda dalam waktu 1-2 hari kerja.\n\n'
+            'Terima kasih atas partisipasi Anda di SI-MAPAN.\n\n'
+            'Salam,\nTim SI-MAPAN'
+        )
+        member_title = 'Pengembalian Dana Pengunduran Diri Dicairkan'
+
+    staff_msg = (
+        f'Dana pengembalian untuk {member.full_name} '
+        f'({source_label}, Rp {refund.amount:,.0f}) '
+        'telah dicairkan.'
+    )
+    email_staff = (
+        f'Dana pengembalian berikut telah dicairkan:\n\n'
+        f'Anggota        : {member.full_name}\n'
+        f'Jenis          : {source_label}\n'
+        f'Nominal        : Rp {refund.amount:,.0f}\n'
+        f'Tanggal Cairkan: {refund.disbursed_at.strftime("%d-%m-%Y %H:%M") if refund.disbursed_at else "-"}\n'
+        f'Petugas        : {refund.disbursed_by.email if refund.disbursed_by else "-"}\n\n'
+        'Salam,\nSistem SI-MAPAN'
+    )
+
+    _broadcast(
+        member_user=member.user,
+        member_email=member.user.email,
+        notif_type='REFUND',
+        member_title=member_title,
+        member_message=member_msg,
+        member_redirect_url='/dashboard/member',
+        staff_title='Dana Pengembalian Dicairkan',
+        staff_message=staff_msg,
+        staff_redirect_url='/dashboard/staff/refunds',
+        broadcast_to='STAFF',
+        email_subject_member='Dana Pengembalian Anda Telah Dicairkan',
+        email_body_member=email_member,
+        email_subject_staff='Dana Pengembalian Dicairkan',
+        email_body_staff=email_staff,
     )

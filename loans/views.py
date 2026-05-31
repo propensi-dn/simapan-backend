@@ -110,11 +110,13 @@ class LoanCreateView(APIView):
             for t in tenor_choices
         }
 
-        balance = getattr(member, 'savings_balance', None)
-        stable_savings = float(balance.total_pokok + balance.total_wajib) if balance else 0
-        total_savings = float(balance.total_overall) if balance else 0
-
+        from .services import calculate_seasoned_savings
         from .models import LoanStatus
+
+        balance = getattr(member, 'savings_balance', None)
+        total_savings = float(balance.total_overall) if balance else 0
+        seasoned_savings = float(calculate_seasoned_savings(member))
+
         active_loans = member.loans.filter(status__in=[LoanStatus.ACTIVE, LoanStatus.OVERDUE])
         current_monthly_obligations = float(
             sum(loan.monthly_installment for loan in active_loans) or 0
@@ -128,7 +130,7 @@ class LoanCreateView(APIView):
             'min_amount': 1_000_000,
             'max_amount': max_amount_by_tenor[12],
             'max_amount_by_tenor': max_amount_by_tenor,
-            'stable_savings': stable_savings,
+            'seasoned_savings': seasoned_savings,
             'total_savings': total_savings,
             'current_monthly_obligations': current_monthly_obligations,
             'member_status': member.status,

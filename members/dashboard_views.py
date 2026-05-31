@@ -96,7 +96,7 @@ class StaffDashboardView(APIView):
                 'subject': f'Setoran {s.get_saving_type_display()}: {s.member.full_name}',
                 'status': 'Menunggu',
                 'action': 'Periksa',
-                'link': f'/dashboard/staff/verifications/savings/{s.saving_id}',
+                'link': f'/dashboard/staff/verifications/savings/{s.pk}',
             })
 
         for ln in Loan.objects.filter(

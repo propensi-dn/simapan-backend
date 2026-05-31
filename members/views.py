@@ -6,6 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
 from .serializers import MemberRegisterSerializer, MemberProfileSerializer, BankAccountSerializer
 from .models import Member, BankAccount
+from users.models import User
 from decimal import Decimal
 from django.db.models import Sum
 
@@ -40,13 +41,16 @@ class MemberStatusView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def get(self, request):
-        email = request.query_params.get('email')
+        email = request.query_params.get('email', '').strip()
         if not email:
             return Response({'error': 'Email wajib diisi'}, status=400)
         try:
-            member = Member.objects.get(user__email=email)
-            return Response({'email': email, 'status': member.status})
-        except Member.DoesNotExist:
+            user = User.objects.select_related('member').get(email__iexact=email)
+            if hasattr(user, 'member'):
+                return Response({'email': user.email, 'status': user.member.status})
+            account_status = 'ACTIVE' if user.is_active else 'INACTIVE'
+            return Response({'email': user.email, 'status': account_status, 'role': user.role})
+        except User.DoesNotExist:
             return Response({'error': 'Email tidak ditemukan'}, status=404)
 
 

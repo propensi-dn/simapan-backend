@@ -542,6 +542,13 @@ class ManagerDashboardView(APIView):
         except (ImportError, Exception):
             pass
 
+        ResignationRequest = None
+        ResignationStatus = None
+        try:
+            from resignations.models import ResignationRequest, ResignationStatus
+        except (ImportError, Exception):
+            pass
+
         response_data = {
             'total_liquidity': snapshot.get('total_liquidity', 0),
             'total_outstanding_loans': snapshot.get('total_outstanding_loans', 0),
@@ -557,8 +564,15 @@ class ManagerDashboardView(APIView):
 
         # 4. Pending loan approvals (count + preview list)
         try:
-            pending_qs = Loan.objects.filter(status=LoanStatus.PENDING).order_by('application_date')[:10]
+            pending_qs = (
+                Loan.objects
+                .filter(status=LoanStatus.PENDING)
+                .select_related('member')
+                .order_by('application_date')[:10]
+            )
             pending_loans_count = Loan.objects.filter(status=LoanStatus.PENDING).count()
+            total_approved = Loan.objects.filter(status=LoanStatus.APPROVED).count()
+            total_overdue = Loan.objects.filter(status=LoanStatus.OVERDUE).count()
             pending_list = []
             for l in pending_qs:
                 pending_list.append({
@@ -571,8 +585,44 @@ class ManagerDashboardView(APIView):
 
             response_data['pending_loans_count'] = pending_loans_count
             response_data['pending_loans'] = pending_list
+            response_data['loan_summary'] = {
+                'total_pending': pending_loans_count,
+                'total_approved': total_approved,
+                'total_overdue': total_overdue,
+            }
         except Exception:
             pass
+
+        # 4b. Resignation requests (summary + preview list)
+        if ResignationRequest and ResignationStatus:
+            try:
+                resignation_pending = (
+                    ResignationRequest.objects
+                    .filter(status__in=[ResignationStatus.PENDING, ResignationStatus.APPROVED])
+                    .select_related('member')
+                    .order_by('-submitted_at')[:8]
+                )
+                resignation_summary = {
+                    'total_pending': ResignationRequest.objects.filter(status=ResignationStatus.PENDING).count(),
+                    'total_approved': ResignationRequest.objects.filter(status=ResignationStatus.APPROVED).count(),
+                    'total_inactive': ResignationRequest.objects.filter(status=ResignationStatus.RESIGNED).count(),
+                }
+                resignation_list = []
+                for req in resignation_pending:
+                    resignation_list.append({
+                        'id': req.id,
+                        'member_name': req.member.full_name,
+                        'member_id': req.member.member_id,
+                        'request_date': req.submitted_at.isoformat() if req.submitted_at else None,
+                        'status': req.status,
+                        'status_display': req.get_status_display(),
+                        'estimated_payout': float(req.estimated_payout or 0),
+                    })
+
+                response_data['resignation_summary'] = resignation_summary
+                response_data['resignation_requests'] = resignation_list
+            except Exception:
+                pass
 
         # 5. Portfolio Performance Trend - 6 months
         try:
@@ -634,6 +684,31 @@ class ManagerDashboardView(APIView):
         except Exception:
             pass
 
+        # 6b. Overdue loan summary (for monitoring)
+        try:
+            today = timezone.now().date()
+            overdue_installments = Installment.objects.filter(
+                status__in=[InstallmentStatus.UNPAID, InstallmentStatus.PENDING],
+                due_date__lt=today,
+                loan__status__in=[LoanStatus.ACTIVE, LoanStatus.OVERDUE],
+            )
+            total_overdue = overdue_installments.values('loan_id').distinct().count()
+            total_amount_overdue = overdue_installments.aggregate(total=Sum('amount'))['total'] or 0
+            critical_cutoff = today - timedelta(days=90)
+            total_critical = Loan.objects.filter(
+                status__in=[LoanStatus.ACTIVE, LoanStatus.OVERDUE],
+                installments__status__in=[InstallmentStatus.UNPAID, InstallmentStatus.PENDING],
+                installments__due_date__lt=critical_cutoff,
+            ).distinct().count()
+
+            response_data['overdue_summary'] = {
+                'total_overdue': total_overdue,
+                'total_amount_overdue': float(total_amount_overdue),
+                'total_critical': total_critical,
+            }
+        except Exception:
+            pass
+
         # 7. Recent credit activities
         if Notification:
             try:
@@ -664,5 +739,44 @@ class ManagerDashboardView(APIView):
                 response_data['recent_activities'] = recent_activities
             except Exception:
                 pass
+
+        # 8. Near-due loans preview (next 14 days)
+        try:
+            today = timezone.now().date()
+            due_until = today + timedelta(days=14)
+            near_due_installments = (
+                Installment.objects
+                .filter(
+                    status__in=[InstallmentStatus.UNPAID, InstallmentStatus.PENDING],
+                    due_date__gte=today,
+                    due_date__lte=due_until,
+                    loan__status__in=[LoanStatus.ACTIVE, LoanStatus.OVERDUE],
+                )
+                .select_related('loan', 'loan__member')
+                .order_by('due_date', 'loan__id')
+            )
+            near_due_loans = []
+            seen_loan_ids = set()
+            for inst in near_due_installments:
+                loan = inst.loan
+                if loan.id in seen_loan_ids:
+                    continue
+                seen_loan_ids.add(loan.id)
+                near_due_loans.append({
+                    'id': loan.id,
+                    'member_name': loan.member.full_name,
+                    'loan_id': loan.loan_id,
+                    'remaining_balance': float(_manager_remaining_balance(loan) or 0),
+                    'due_date': inst.due_date.isoformat() if inst.due_date else None,
+                    'status': loan.status,
+                    'status_display': loan.get_status_display(),
+                    'detail_url': f'/dashboard/manager/loans/{loan.id}',
+                })
+                if len(near_due_loans) >= 6:
+                    break
+
+            response_data['near_due_loans'] = near_due_loans
+        except Exception:
+            pass
 
         return Response(response_data)

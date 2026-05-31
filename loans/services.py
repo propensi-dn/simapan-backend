@@ -1,4 +1,5 @@
 from decimal import Decimal
+from datetime import timedelta
 from django.utils import timezone
 from dateutil.relativedelta import relativedelta
 
@@ -47,22 +48,44 @@ def has_bad_debt(member) -> bool:
     return BadDebt.objects.filter(loan__member=member).exists()
 
 
+def calculate_seasoned_savings(member) -> Decimal:
+    """
+    Simpanan yang sudah 'matang' — total simpanan dikurangi deposit yang
+    baru diapprove dalam 30 hari terakhir. Mencegah abuse deposit cepat
+    sambil tetap menghargai anggota yang memang kaya simpanan genuinely.
+    Menggunakan updated_at (tanggal diapprove) bukan submitted_at.
+    """
+    from django.db.models import Sum
+    from savings.models import SavingTransaction, SavingStatus
+
+    balance = getattr(member, 'savings_balance', None)
+    if not balance:
+        return Decimal('0')
+
+    cutoff = timezone.now() - timedelta(days=30)
+    recent = SavingTransaction.objects.filter(
+        member=member,
+        status=SavingStatus.SUCCESS,
+        updated_at__gte=cutoff,
+    ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+
+    return max(balance.total_overall - recent, Decimal('0'))
+
+
 def calculate_max_loan_from_savings(member, tenor: int = 12) -> Decimal:
     """
     Hitung batas maksimal pinjaman berdasarkan:
-    1. Stable savings (pokok + wajib saja, sukarela bisa ditarik bebas)
+    1. Seasoned savings (total simpanan minus deposit <30 hari)
     2. Dikurangi kewajiban cicilan aktif yang sedang berjalan
-    3. Max cicilan baru ≤ 20% × stable_savings (MONTHLY_CAPACITY_RATIO)
+    3. Max cicilan baru ≤ 20% × seasoned_savings (MONTHLY_CAPACITY_RATIO)
     Back-calculate dari flat-rate: max_loan = net_monthly × tenor / (1 + 0.005 × tenor)
     """
     ABSOLUTE_CAP = Decimal('50000000')
     MONTHLY_CAPACITY_RATIO = Decimal('0.20')
     INTEREST_RATE = Decimal('0.005')
 
-    balance = getattr(member, 'savings_balance', None)
-    stable_savings = (balance.total_pokok + balance.total_wajib) if balance else Decimal('0')
-
-    max_monthly = stable_savings * MONTHLY_CAPACITY_RATIO
+    seasoned = calculate_seasoned_savings(member)
+    max_monthly = seasoned * MONTHLY_CAPACITY_RATIO
 
     from loans.models import LoanStatus
     active_loans = member.loans.filter(status__in=[LoanStatus.ACTIVE, LoanStatus.OVERDUE])

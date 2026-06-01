@@ -1,8 +1,8 @@
 from decimal import Decimal
 from django.db import transaction
-from django.utils import timezone
 
 from savings.models import SavingTransaction, SavingsBalance, SavingType, SavingStatus
+from savings.services import mark_mandatory_obligation_paid, revert_mandatory_obligation_on_reject
 from notifications.service import notify_saving_verified, notify_saving_rejected
 
 
@@ -47,6 +47,8 @@ def approve_saving_transaction(saving: SavingTransaction, staff_user) -> dict:
         balance.total_sukarela = (balance.total_sukarela or Decimal('0')) + saving.amount
         balance.save(update_fields=['total_sukarela', 'last_updated'])
 
+    mark_mandatory_obligation_paid(saving)
+
     notify_saving_verified(saving)
 
     return {'member_activated': member_activated, 'balance': balance}
@@ -61,5 +63,7 @@ def reject_saving_transaction(saving: SavingTransaction, staff_user, reason: str
     saving.verified_by      = staff_user
     saving.rejection_reason = reason
     saving.save(update_fields=['status', 'verified_by', 'rejection_reason'])
+
+    revert_mandatory_obligation_on_reject(saving)
 
     notify_saving_rejected(saving, reason)

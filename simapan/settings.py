@@ -76,18 +76,11 @@ DATABASES = {
         'PASSWORD': config('DB_PASSWORD'),
         'HOST':     config('DB_HOST'),
         'PORT':     config('DB_PORT', default='5432'),
-        # Local (default): disable SSL for local Postgres
-        'OPTIONS':  {'sslmode': config('DB_SSLMODE', default='disable')},
-        # Production toggle:
-        # 'OPTIONS': {'sslmode': 'require'},
+        'OPTIONS': {'sslmode': 'require'},
     }
 }
 
-# Local (default): save uploaded files to local /media folder
-DEFAULT_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'
-
-# Production toggle:
-# DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
 CLOUDINARY_STORAGE = {
     'CLOUD_NAME': config('CLOUDINARY_CLOUD_NAME', default=''),

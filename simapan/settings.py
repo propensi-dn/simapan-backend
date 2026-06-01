@@ -76,11 +76,18 @@ DATABASES = {
         'PASSWORD': config('DB_PASSWORD'),
         'HOST':     config('DB_HOST'),
         'PORT':     config('DB_PORT', default='5432'),
-        'OPTIONS':  {'sslmode': 'require'},
+        # Local (default): disable SSL for local Postgres
+        'OPTIONS':  {'sslmode': config('DB_SSLMODE', default='disable')},
+        # Production toggle:
+        # 'OPTIONS': {'sslmode': 'require'},
     }
 }
 
-DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
+# Local (default): save uploaded files to local /media folder
+DEFAULT_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'
+
+# Production toggle:
+# DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
 CLOUDINARY_STORAGE = {
     'CLOUD_NAME': config('CLOUDINARY_CLOUD_NAME', default=''),
@@ -111,14 +118,25 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
+# Local (default)
 STORAGES = {
     'default': {
-        'BACKEND': 'cloudinary_storage.storage.MediaCloudinaryStorage',
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
     },
     'staticfiles': {
         'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
     },
 }
+
+# Production toggle:
+# STORAGES = {
+#     'default': {
+#         'BACKEND': 'cloudinary_storage.storage.MediaCloudinaryStorage',
+#     },
+#     'staticfiles': {
+#         'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
+#     },
+# }
 
 STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
 

@@ -263,6 +263,14 @@ class SavingsOverviewView(BaseMemberSavingsView):
 					'installment_number': None,
 				})
 
+		source_filter = request.query_params.get('source')
+		if source_filter:
+			allowed_sources = {value.strip().upper() for value in source_filter.split(',') if value.strip()}
+			combined_items = [
+				item for item in combined_items
+				if str(item.get('source', '')).upper() in allowed_sources
+			]
+
 		combined_items.sort(key=lambda item: item.get('submitted_at') or '', reverse=True)
 
 		balance = SavingsBalance.objects.filter(member=member).first()

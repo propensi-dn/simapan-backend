@@ -76,7 +76,7 @@ DATABASES = {
         'PASSWORD': config('DB_PASSWORD'),
         'HOST':     config('DB_HOST'),
         'PORT':     config('DB_PORT', default='5432'),
-        'OPTIONS': {'sslmode': 'require'},
+        'OPTIONS':  {'sslmode': 'require'},
     }
 }
 
@@ -111,25 +111,14 @@ USE_TZ = True
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
-# Local (default)
 STORAGES = {
     'default': {
-        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+        'BACKEND': 'cloudinary_storage.storage.MediaCloudinaryStorage',
     },
     'staticfiles': {
         'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
     },
 }
-
-# Production toggle:
-# STORAGES = {
-#     'default': {
-#         'BACKEND': 'cloudinary_storage.storage.MediaCloudinaryStorage',
-#     },
-#     'staticfiles': {
-#         'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
-#     },
-# }
 
 STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
 

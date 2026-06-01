@@ -31,10 +31,12 @@ class ChairmanCashflowView(APIView):
             start_date = request.query_params.get('start_date')
             end_date = request.query_params.get('end_date')
             
-            # Default date range: current month
+            # Default date range: current month (full month)
             today = timezone.now().date()
+            month_start = date(today.year, today.month, 1)
+            month_end = date(today.year, today.month + 1, 1) - timedelta(days=1) if today.month < 12 else date(today.year, 12, 31)
             if not start_date:
-                start_date = date(today.year, today.month, 1)
+                start_date = month_start
             else:
                 try:
                     start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
@@ -45,7 +47,7 @@ class ChairmanCashflowView(APIView):
                     )
             
             if not end_date:
-                end_date = today
+                end_date = month_end
             else:
                 try:
                     end_date = datetime.strptime(end_date, '%Y-%m-%d').date()

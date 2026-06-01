@@ -84,7 +84,7 @@ class StaffDashboardView(APIView):
                 'subject': f'Pendaftaran: {m.full_name}',
                 'status': 'Menunggu',
                 'action': 'Verifikasi',
-                'link': f'/dashboard/staff/verification/{m.pk}',
+                'link': f'/dashboard/staff/verification/{m.pk}/verify',
             })
 
         for s in SavingTransaction.objects.filter(
@@ -96,7 +96,7 @@ class StaffDashboardView(APIView):
                 'subject': f'Setoran {s.get_saving_type_display()}: {s.member.full_name}',
                 'status': 'Menunggu',
                 'action': 'Periksa',
-                'link': '/dashboard/staff/verifications/savings',
+                'link': f'/dashboard/staff/verifications/savings/{s.pk}',
             })
 
         for ln in Loan.objects.filter(
@@ -108,7 +108,7 @@ class StaffDashboardView(APIView):
                 'subject': f'Pencairan: {ln.member.full_name}',
                 'status': 'Disetujui',
                 'action': 'Cairkan',
-                'link': '/dashboard/staff/disbursement',
+                'link': f'/dashboard/staff/disbursement/{ln.loan_id}',
             })
 
         for ins in Installment.objects.filter(
@@ -120,7 +120,7 @@ class StaffDashboardView(APIView):
                 'subject': f'Cicilan #{ins.installment_number}: {ins.loan.member.full_name}',
                 'status': 'Menunggu',
                 'action': 'Verifikasi',
-                'link': '/dashboard/staff/installments',
+                'link': f'/dashboard/staff/installments/{ins.pk}',
             })
 
         for wd in SavingsWithdrawal.objects.filter(

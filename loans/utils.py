@@ -46,7 +46,7 @@ def get_snapshot_financials():
 
     # Outstanding from unpaid installments
     try:
-        from .models import Installment, InstallmentStatus, Loan
+        from .models import Installment, InstallmentStatus, Loan, LoanStatus
 
         unpaid_total = Installment.objects.filter(
             status__in=[InstallmentStatus.UNPAID, InstallmentStatus.PENDING]
@@ -59,24 +59,17 @@ def get_snapshot_financials():
         ).aggregate(total=Sum('interest_component'))['total'] or 0
         interest_income = safe_decimal(paid_interest)
 
-        # NPL: loans that have unpaid installments with due_date < today
+        # NPL: align with overdue monitoring (ACTIVE/OVERDUE loans only)
         today = timezone.now().date()
         overdue_installments = Installment.objects.filter(
             status__in=[InstallmentStatus.UNPAID, InstallmentStatus.PENDING],
             due_date__lt=today,
-        ).select_related('loan')
-
-        seen = set()
-        for inst in overdue_installments:
-            loan = inst.loan
-            if loan.id in seen:
-                continue
-            seen.add(loan.id)
-            npl_count += 1
-            try:
-                npl_amount += safe_decimal(getattr(loan, 'outstanding_balance', 0))
-            except Exception:
-                pass
+            loan__status__in=[LoanStatus.ACTIVE, LoanStatus.OVERDUE],
+        )
+        npl_count = overdue_installments.values('loan_id').distinct().count()
+        npl_amount = safe_decimal(
+            overdue_installments.aggregate(total=Sum('amount'))['total'] or 0
+        )
 
     except Exception:
         pass

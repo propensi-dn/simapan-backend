@@ -724,6 +724,38 @@ def notify_loan_overdue(loan):
     )
 
 
+def notify_mandatory_saving_reminder(obligation, overdue=False):
+    status_label = 'OVERDUE' if overdue else 'akan jatuh tempo'
+    member_msg = (
+        f'Tagihan simpanan wajib periode {obligation.period_start:%B %Y} {status_label}. '
+        f'Batas pembayaran: {obligation.due_date:%d %b %Y}. '
+        'Silakan lakukan pembayaran sesegera mungkin.'
+    )
+
+    email_member = (
+        f'Yth. {obligation.member.full_name},\n\n'
+        f'Tagihan simpanan wajib periode {obligation.period_start:%B %Y} '
+        f'{"sudah OVERDUE" if overdue else "akan jatuh tempo"} pada {obligation.due_date:%d %B %Y}.\n\n'
+        'Silakan lakukan pembayaran simpanan wajib Anda agar status kewajiban tetap lancar.\n\n'
+        'Salam,\nTim SI-MAPAN'
+    )
+
+    _broadcast(
+        member_user=obligation.member.user,
+        member_email=obligation.member.user.email,
+        notif_type='SAVING',
+        member_title='Tagihan Simpanan Wajib',
+        member_message=member_msg,
+        member_redirect_url='/dashboard/member/savings',
+        staff_title='',
+        staff_message='',
+        staff_redirect_url='',
+        broadcast_to=None,
+        email_subject_member='Pengingat Simpanan Wajib',
+        email_body_member=email_member,
+    )
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # WITHDRAWALS
 # ═══════════════════════════════════════════════════════════════════════════

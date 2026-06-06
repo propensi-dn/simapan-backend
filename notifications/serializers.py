@@ -25,6 +25,7 @@ class NotificationListSerializer(serializers.ModelSerializer):
             'id',
             'type',
             'title',
+            'message',
             'is_read',
             'redirect_url',
             'created_at',

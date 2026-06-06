@@ -514,6 +514,67 @@ class ManagerLoanStatusUpdateView(APIView):
             'status': loan.status,
         })
 
+
+class ManagerBulkApproveLoansView(APIView):
+    """
+    POST /api/manager/loans/pending/bulk-approve/
+
+    Body:
+      {"loan_ids": [1, 2, 3]}
+    """
+    permission_classes = [IsManagerOrAbove]
+
+    def post(self, request):
+        loan_ids = request.data.get('loan_ids', [])
+        if not isinstance(loan_ids, list) or not loan_ids:
+            return Response(
+                {'error': 'loan_ids harus berupa list ID pinjaman yang valid dan tidak boleh kosong.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        loans = Loan.objects.filter(id__in=loan_ids, status=LoanStatus.PENDING).select_related('member', 'member__user')
+        if not loans.exists():
+            return Response(
+                {'error': 'Tidak ditemukan pengajuan pinjaman pending dengan ID yang diberikan.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        approved_count = 0
+        failed_loans = []
+        
+        from django.db import transaction
+        
+        for loan in loans:
+            try:
+                with transaction.atomic():
+                    loan.reviewed_by = request.user
+                    loan.reviewed_at = timezone.now()
+                    loan.status = LoanStatus.APPROVED
+                    loan.rejection_reason = ''
+                    loan.save(update_fields=['status', 'reviewed_by', 'reviewed_at', 'rejection_reason', 'updated_at'])
+                    
+                    try:
+                        from notifications.service import notify_loan_approved
+                        notify_loan_approved(loan)
+                    except Exception:
+                        pass
+                approved_count += 1
+            except Exception as e:
+                failed_loans.append({'id': loan.id, 'loan_id': loan.loan_id, 'error': str(e)})
+
+        if failed_loans:
+            return Response({
+                'message': f'Berhasil menyetujui {approved_count} pinjaman. Gagal menyetujui {len(failed_loans)} pinjaman.',
+                'approved_count': approved_count,
+                'failed_loans': failed_loans
+            }, status=status.HTTP_207_MULTI_STATUS)
+
+        return Response({
+            'message': f'Berhasil menyetujui {approved_count} pengajuan pinjaman secara sekaligus.',
+            'approved_count': approved_count
+        }, status=status.HTTP_200_OK)
+
+
 class ManagerDashboardView(APIView):
     """
     GET /api/manager/loans/dashboard/

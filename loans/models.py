@@ -67,6 +67,7 @@ class Loan(models.Model):
     # Disbursement
     disbursed_by        = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='disbursed_loans')
     disbursed_at        = models.DateTimeField(null=True, blank=True)
+    disbursement_note   = models.TextField(null=True, blank='')
     disbursement_proof  = models.ImageField(upload_to='loans/disbursement/', null=True, blank=True)
 
     # Timestamps

@@ -314,6 +314,8 @@ class StaffLoanDisbursementView(APIView):
         loan.status = LoanStatus.ACTIVE
         loan.disbursed_by = request.user
         loan.disbursed_at = timezone.now()
+        notes =  str(request.data.get('disbursement_note', '')).strip()
+        loan.disbursement_note = notes
 
         # Handle disbursement proof jika ada
         if 'disbursement_proof' in request.FILES:
@@ -339,6 +341,7 @@ class StaffLoanDisbursementView(APIView):
             'member_name': loan.member.full_name,
             'amount': str(loan.amount),
             'disbursed_at': loan.disbursed_at,
+            'disbursement_note' : loan.disbursement_note,
         }, status=status.HTTP_200_OK)
 
 

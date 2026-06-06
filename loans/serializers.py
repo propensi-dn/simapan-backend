@@ -73,6 +73,7 @@ class StaffDisbursedLoanSerializer(serializers.ModelSerializer):
             'approved_at',
             'disbursed_at',
             'disbursed_by_name',
+            'disbursement_note',
         ]
         read_only_fields = fields
 

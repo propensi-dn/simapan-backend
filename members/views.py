@@ -9,6 +9,7 @@ from .models import Member, BankAccount
 from users.models import User
 from decimal import Decimal
 from django.db.models import Sum
+from datetime import datetime
 
 from savings.models import SavingTransaction, SavingsBalance, SavingStatus
 from loans.models import Loan, Installment, LoanStatus, InstallmentStatus
@@ -232,11 +233,30 @@ class MemberDashboardView(APIView):
         )
         total_loan = sum(loan.outstanding_balance for loan in active_loans)
 
+        start_date = None
+        end_date = None
+        raw_start = request.query_params.get('start_date')
+        raw_end = request.query_params.get('end_date')
+        try:
+            if raw_start:
+                start_date = datetime.strptime(raw_start, '%Y-%m-%d').date()
+            if raw_end:
+                end_date = datetime.strptime(raw_end, '%Y-%m-%d').date()
+        except ValueError:
+            pass
+        is_filtered = bool(start_date or end_date)
+
         # Recent Transactions
         # a) Saving transactions
-        saving_txs = SavingTransaction.objects.filter(
-            member=member
-        ).order_by('-submitted_at')[:20]
+        # saving_txs = SavingTransaction.objects.filter(
+        #     member=member
+        # ).order_by('-submitted_at')[:20]
+        saving_qs = SavingTransaction.objects.filter(member=member).order_by('-submitted_at')
+        if start_date:
+            saving_qs = saving_qs.filter(submitted_at__date__gte=start_date)
+        if end_date:
+            saving_qs = saving_qs.filter(submitted_at__date__lte=end_date)
+        saving_txs = saving_qs if is_filtered else saving_qs[:20]
 
         saving_items = []
         for tx in saving_txs:
@@ -257,10 +277,17 @@ class MemberDashboardView(APIView):
             })
 
         # b) Installment payments (PAID dan PENDING)
-        installments = Installment.objects.filter(
+        # installments = Installment.objects.filter(
+        installment_qs = Installment.objects.filter(
             loan__member=member,
             status__in=[InstallmentStatus.PAID, InstallmentStatus.PENDING],
-        ).select_related('loan').order_by('-submitted_at')[:20]
+        # ).select_related('loan').order_by('-submitted_at')[:20]
+        ).select_related('loan').order_by('-submitted_at')
+        if start_date:
+            installment_qs = installment_qs.filter(submitted_at__date__gte=start_date)
+        if end_date:
+            installment_qs = installment_qs.filter(submitted_at__date__lte=end_date)
+        installments = installment_qs if is_filtered else installment_qs[:20]
 
         installment_items = []
         for ins in installments:
@@ -276,11 +303,13 @@ class MemberDashboardView(APIView):
 
         # c) Gabungkan dan sort by date descending, ambil 10 terbaru
         all_transactions = saving_items + installment_items
-        all_transactions.sort(
-            key=lambda x: x['date'] or '',
-            reverse=True
-        )
-        recent_transactions = all_transactions[:10]
+        # all_transactions.sort(
+        #     key=lambda x: x['date'] or '',
+        #     reverse=True
+        # )
+        # recent_transactions = all_transactions[:10]
+        all_transactions.sort(key=lambda x: x['date'] or '', reverse=True)
+        recent_transactions = all_transactions if is_filtered else all_transactions[:10]
 
         return Response({
             'total_savings': str(total_savings),

@@ -189,7 +189,7 @@ def notify_registration_pending(member):
         member_redirect_url='/status',
         staff_title='Pendaftaran Anggota Baru',
         staff_message=staff_msg,
-        staff_redirect_url='/dashboard/staff/members/pending',
+        staff_redirect_url='/dashboard/staff/verification',
         broadcast_to='STAFF',
         email_subject_member='Pendaftaran Anda Telah Diterima',
         email_body_member=email_member,
@@ -220,7 +220,7 @@ def notify_registration_verified(member):
         notif_type='REGISTRATION',
         member_title='Pendaftaran Disetujui',
         member_message=member_msg,
-        member_redirect_url='/dashboard/member',
+        member_redirect_url='/dashboard/member/savings',
         staff_title='',
         staff_message='',
         staff_redirect_url='',
@@ -302,10 +302,10 @@ def notify_saving_received(saving):
         notif_type='SAVING',
         member_title='Setoran Diterima',
         member_message=member_msg,
-        member_redirect_url='/savings',
+        member_redirect_url='/dashboard/member/savings',
         staff_title='Setoran Simpanan Baru',
         staff_message=staff_msg,
-        staff_redirect_url='/dashboard/staff/savings/pending',
+        staff_redirect_url='/dashboard/staff/verifications/savings',
         broadcast_to='STAFF',
         email_subject_member='Setoran Anda Telah Diterima',
         email_body_member=email_member,
@@ -334,7 +334,7 @@ def notify_saving_verified(saving):
         notif_type='SAVING',
         member_title='Setoran Terverifikasi',
         member_message=member_msg,
-        member_redirect_url='/savings',
+        member_redirect_url='/dashboard/member/savings',
         staff_title='', staff_message='', staff_redirect_url='',
         broadcast_to=None,
         email_subject_member='Setoran Anda Telah Diverifikasi',
@@ -366,7 +366,7 @@ def notify_saving_rejected(saving, reason=''):
         notif_type='SAVING',
         member_title='Setoran Ditolak',
         member_message=member_msg,
-        member_redirect_url='/savings',
+        member_redirect_url='/dashboard/member/savings',
         staff_title='', staff_message='', staff_redirect_url='',
         broadcast_to=None,
         email_subject_member='Setoran Anda Ditolak',
@@ -417,7 +417,7 @@ def notify_loan_submitted(loan):
         member_redirect_url=f'/dashboard/member/loans/{loan.id}',
         staff_title='Pengajuan Pinjaman Baru',
         staff_message=manager_msg,
-        staff_redirect_url='/dashboard/manager/loans/pending',
+        staff_redirect_url='/dashboard/manager/loans',
         broadcast_to='MANAGER',
         email_subject_member='Pengajuan Pinjaman Anda Telah Diterima',
         email_body_member=email_member,
@@ -464,7 +464,7 @@ def notify_loan_approved(loan):
         member_redirect_url=f'/dashboard/member/loans/{loan.id}',
         staff_title='Pinjaman Menunggu Pencairan',
         staff_message=staff_msg,
-        staff_redirect_url='/dashboard/staff/loans/approved',
+        staff_redirect_url='/dashboard/staff/disbursement',
         broadcast_to='STAFF',
         email_subject_member='Pinjaman Anda Telah Disetujui',
         email_body_member=email_member,
@@ -576,7 +576,7 @@ def notify_installment_submitted(installment):
         member_redirect_url=f'/dashboard/member/loans/{loan.id}',
         staff_title='Pembayaran Cicilan Baru',
         staff_message=staff_msg,
-        staff_redirect_url='/dashboard/staff/installments/pending',
+        staff_redirect_url='/dashboard/staff/installments',
         broadcast_to='STAFF',
         email_subject_member='Pembayaran Cicilan Anda Telah Dikirim',
         email_body_member=email_member,
@@ -715,8 +715,8 @@ def notify_loan_overdue(loan):
         member_redirect_url=f'/dashboard/member/loans/{loan.id}',
         staff_title='Pinjaman Overdue',
         staff_message=staff_msg,
-        staff_redirect_url='/dashboard/staff/loans/overdue',
-        broadcast_to='STAFF',
+        staff_redirect_url='/dashboard/manager/credit',
+        broadcast_to='MANAGER',
         email_subject_member='Pinjaman Anda Overdue',
         email_body_member=email_member,
         email_subject_staff='Pinjaman Masuk Status Overdue',
@@ -725,6 +725,7 @@ def notify_loan_overdue(loan):
 
 
 def notify_mandatory_saving_reminder(obligation, overdue=False):
+    """Reminder berbasis MandatorySavingObligation (sistem terbaru dari main)."""
     status_label = 'OVERDUE' if overdue else 'akan jatuh tempo'
     member_msg = (
         f'Tagihan simpanan wajib periode {obligation.period_start:%B %Y} {status_label}. '
@@ -752,80 +753,6 @@ def notify_mandatory_saving_reminder(obligation, overdue=False):
         staff_redirect_url='',
         broadcast_to=None,
         email_subject_member='Pengingat Simpanan Wajib',
-        email_body_member=email_member,
-    )
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# WITHDRAWALS
-# ═══════════════════════════════════════════════════════════════════════════
-
-def notify_withdrawal_received(withdrawal):
-    """Member ajuin penarikan → member + staff dapet notif."""
-    member_msg = (
-        'Permintaan penarikan simpanan Anda telah diterima '
-        'dan sedang diproses oleh petugas.'
-    )
-    staff_msg = (
-        f'Permintaan penarikan dari {withdrawal.member.full_name} '
-        f'menunggu proses.'
-    )
-
-    email_member = (
-        f'Yth. {withdrawal.member.full_name},\n\n'
-        'Permintaan penarikan simpanan Anda telah kami terima '
-        'dan sedang dalam proses oleh petugas.\n\n'
-        'Anda akan menerima notifikasi setelah dana ditransfer.\n\n'
-        'Salam,\nTim SI-MAPAN'
-    )
-    email_staff = (
-        f'Ada permintaan penarikan simpanan yang menunggu proses:\n\n'
-        f'Anggota : {withdrawal.member.full_name}\n\n'
-        'Silakan login ke dashboard untuk memprosesnya.\n\n'
-        'Salam,\nSistem SI-MAPAN'
-    )
-
-    _broadcast(
-        member_user=withdrawal.member.user,
-        member_email=withdrawal.member.user.email,
-        notif_type='WITHDRAWAL',
-        member_title='Permintaan Penarikan Diterima',
-        member_message=member_msg,
-        member_redirect_url='/dashboard/member/withdrawals',
-        staff_title='Permintaan Penarikan Baru',
-        staff_message=staff_msg,
-        staff_redirect_url='/dashboard/staff/withdrawals',
-        broadcast_to='STAFF',
-        email_subject_member='Permintaan Penarikan Anda Telah Diterima',
-        email_body_member=email_member,
-        email_subject_staff='Permintaan Penarikan Menunggu Proses',
-        email_body_staff=email_staff,
-    )
-
-
-def notify_withdrawal_processed(withdrawal):
-    """Staff proses penarikan → member dapet notif + email."""
-    member_msg = (
-        'Permintaan penarikan simpanan Anda telah diproses. '
-        'Dana akan ditransfer ke rekening bank terdaftar.'
-    )
-    email_member = (
-        f'Yth. {withdrawal.member.full_name},\n\n'
-        'Permintaan penarikan simpanan Anda telah diproses oleh petugas.\n'
-        'Dana akan ditransfer ke rekening bank terdaftar Anda.\n\n'
-        'Salam,\nTim SI-MAPAN'
-    )
-
-    _broadcast(
-        member_user=withdrawal.member.user,
-        member_email=withdrawal.member.user.email,
-        notif_type='WITHDRAWAL',
-        member_title='Penarikan Diproses',
-        member_message=member_msg,
-        member_redirect_url='/dashboard/member/withdrawals',
-        staff_title='', staff_message='', staff_redirect_url='',
-        broadcast_to=None,
-        email_subject_member='Penarikan Anda Telah Diproses',
         email_body_member=email_member,
     )
 
@@ -865,10 +792,10 @@ def notify_resignation_received(resignation):
         notif_type='RESIGNATION',
         member_title='Permintaan Pengunduran Diri Diterima',
         member_message=member_msg,
-        member_redirect_url='/dashboard/member/resignation',
+        member_redirect_url='/dashboard/member/resignations',
         staff_title='Permintaan Pengunduran Diri Baru',
         staff_message=manager_msg,
-        staff_redirect_url='/dashboard/manager/resignations/pending',
+        staff_redirect_url='/dashboard/manager/resignations',
         broadcast_to='MANAGER',
         email_subject_member='Permintaan Pengunduran Diri Anda Telah Diterima',
         email_body_member=email_member,

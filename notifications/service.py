@@ -725,7 +725,6 @@ def notify_loan_overdue(loan):
 
 
 def notify_mandatory_saving_reminder(obligation, overdue=False):
-    """Reminder berbasis MandatorySavingObligation (sistem terbaru dari main)."""
     status_label = 'OVERDUE' if overdue else 'akan jatuh tempo'
     member_msg = (
         f'Tagihan simpanan wajib periode {obligation.period_start:%B %Y} {status_label}. '
@@ -751,6 +750,71 @@ def notify_mandatory_saving_reminder(obligation, overdue=False):
         staff_title='',
         staff_message='',
         staff_redirect_url='',
+        broadcast_to=None,
+        email_subject_member='Pengingat Simpanan Wajib',
+        email_body_member=email_member,
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# WITHDRAWALS
+# ═══════════════════════════════════════════════════════════════════════════
+
+def notify_withdrawal_received(withdrawal):
+    """Member ajuin penarikan → member + staff dapet notif."""
+    member_msg = (
+        f'Tagihan simpanan wajib periode {obligation.period_start:%B %Y} {status_label}. '
+        f'Batas pembayaran: {obligation.due_date:%d %b %Y}. '
+        'Silakan lakukan pembayaran sesegera mungkin.'
+    )
+
+    email_member = (
+        f'Yth. {obligation.member.full_name},\n\n'
+        f'Tagihan simpanan wajib periode {obligation.period_start:%B %Y} '
+        f'{"sudah OVERDUE" if overdue else "akan jatuh tempo"} pada {obligation.due_date:%d %B %Y}.\n\n'
+        'Silakan lakukan pembayaran simpanan wajib Anda agar status kewajiban tetap lancar.\n\n'
+        'Salam,\nTim SI-MAPAN'
+    )
+
+    _broadcast(
+        member_user=obligation.member.user,
+        member_email=obligation.member.user.email,
+        notif_type='SAVING',
+        member_title='Tagihan Simpanan Wajib',
+        member_message=member_msg,
+        member_redirect_url='/dashboard/member/withdrawals',
+        staff_title='Permintaan Penarikan Baru',
+        staff_message=staff_msg,
+        staff_redirect_url='/dashboard/staff/withdrawals',
+        broadcast_to='STAFF',
+        email_subject_member='Permintaan Penarikan Anda Telah Diterima',
+        email_body_member=email_member,
+        email_subject_staff='Permintaan Penarikan Menunggu Proses',
+        email_body_staff=email_staff,
+    )
+
+
+def notify_withdrawal_processed(withdrawal):
+    """Staff proses penarikan → member dapet notif + email."""
+    member_msg = (
+        'Permintaan penarikan simpanan Anda telah diproses. '
+        'Dana akan ditransfer ke rekening bank terdaftar.'
+    )
+    email_member = (
+        f'Yth. {withdrawal.member.full_name},\n\n'
+        'Permintaan penarikan simpanan Anda telah diproses oleh petugas.\n'
+        'Dana akan ditransfer ke rekening bank terdaftar Anda.\n\n'
+        'Salam,\nTim SI-MAPAN'
+    )
+
+    _broadcast(
+        member_user=withdrawal.member.user,
+        member_email=withdrawal.member.user.email,
+        notif_type='WITHDRAWAL',
+        member_title='Penarikan Diproses',
+        member_message=member_msg,
+        member_redirect_url='/dashboard/member/withdrawals',
+        staff_title='', staff_message='', staff_redirect_url='',
         broadcast_to=None,
         email_subject_member='Pengingat Simpanan Wajib',
         email_body_member=email_member,

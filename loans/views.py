@@ -122,6 +122,9 @@ class LoanCreateView(APIView):
             sum(loan.monthly_installment for loan in active_loans) or 0
         )
 
+        from savings.services import get_mandatory_savings_summary
+        wajib_overdue_months = get_mandatory_savings_summary(member)['overdue_count']
+
         return Response({
             'bank_accounts': BankAccountSerializer(bank_accounts, many=True).data,
             'categories': categories,
@@ -135,6 +138,7 @@ class LoanCreateView(APIView):
             'current_monthly_obligations': current_monthly_obligations,
             'member_status': member.status,
             'has_bad_debt': has_bad_debt(member),
+            'wajib_overdue_months': wajib_overdue_months,
         })
 
     def post(self, request):

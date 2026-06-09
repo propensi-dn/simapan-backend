@@ -180,6 +180,15 @@ class LoanCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 'Anda memiliki kredit macet dan tidak dapat mengajukan pinjaman baru.'
             )
+
+        from savings.services import get_mandatory_savings_summary
+        overdue_months = get_mandatory_savings_summary(member)['overdue_count']
+        if overdue_months > 2:
+            raise serializers.ValidationError(
+                f'Anda memiliki tunggakan simpanan wajib selama {overdue_months} bulan. '
+                'Lunasi tunggakan simpanan wajib Anda (maksimal 2 bulan) sebelum mengajukan pinjaman baru.'
+            )
+
         tenor = attrs.get('tenor', 12)
         max_loan = calculate_max_loan_from_savings(member, tenor)
         if max_loan < 1_000_000:
@@ -453,6 +462,15 @@ class LoanCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 'Anda memiliki kredit macet dan tidak dapat mengajukan pinjaman baru.'
             )
+
+        from savings.services import get_mandatory_savings_summary
+        overdue_months = get_mandatory_savings_summary(member)['overdue_count']
+        if overdue_months > 2:
+            raise serializers.ValidationError(
+                f'Anda memiliki tunggakan simpanan wajib selama {overdue_months} bulan. '
+                'Lunasi tunggakan simpanan wajib Anda (maksimal 2 bulan) sebelum mengajukan pinjaman baru.'
+            )
+
         tenor = attrs.get('tenor', 12)
         max_loan = calculate_max_loan_from_savings(member, tenor)
         if max_loan < 1_000_000:
